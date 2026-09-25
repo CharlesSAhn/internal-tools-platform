@@ -117,26 +117,46 @@ const FLAGS: FlagSeed[] = [
   },
 ];
 
+function envRows(f: FlagSeed) {
+  return [
+    { env: "DEV" as const, ...f.dev, targetUserIds: f.dev.targetUserIds ?? [] },
+    { env: "STAGING" as const, ...f.staging, targetUserIds: f.staging.targetUserIds ?? [] },
+    { env: "PROD" as const, ...f.prod, targetUserIds: f.prod.targetUserIds ?? [] },
+  ];
+}
+
 export async function seedFlags() {
-  await prisma.flagEnvState.deleteMany({});
-  await prisma.featureFlag.deleteMany({});
+  const reset = process.env.RESET_DEMO === "1";
+  if (reset) {
+    await prisma.flagEnvState.deleteMany({});
+    await prisma.featureFlag.deleteMany({});
+  }
 
   for (const f of FLAGS) {
-    await prisma.featureFlag.create({
-      data: {
+    const flag = await prisma.featureFlag.upsert({
+      where: { key: f.key },
+      update: {},
+      create: {
         key: f.key,
         description: f.description,
         ownerEmail: f.ownerEmail,
         archived: f.archived ?? false,
-        envStates: {
-          create: [
-            { env: "DEV", ...f.dev, targetUserIds: f.dev.targetUserIds ?? [] },
-            { env: "STAGING", ...f.staging, targetUserIds: f.staging.targetUserIds ?? [] },
-            { env: "PROD", ...f.prod, targetUserIds: f.prod.targetUserIds ?? [] },
-          ],
-        },
+        envStates: { create: envRows(f) },
       },
+      include: { envStates: true },
     });
+
+    const missing = envRows(f).filter((row) => !flag.envStates.some((s) => s.env === row.env));
+    if (missing.length > 0) {
+      await prisma.flagEnvState.createMany({
+        data: missing.map((row) => ({ flagId: flag.id, ...row })),
+        skipDuplicates: true,
+      });
+    }
   }
-  console.log(`seeded ${FLAGS.length} feature flags with ${FLAGS.length * 3} environment states`);
+  console.log(
+    reset
+      ? `reset demo data: ${FLAGS.length} feature flags with ${FLAGS.length * 3} environment states`
+      : `seeded ${FLAGS.length} demo feature flags (existing flag configuration left untouched)`,
+  );
 }
