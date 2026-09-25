@@ -32,7 +32,7 @@ function riskFilter(risk?: string): Prisma.KycCaseWhereInput {
 }
 
 function parseStatus(status?: string): KycStatus | undefined {
-  return status && status in STATUS_TONE ? (status as KycStatus) : undefined;
+  return status && Object.hasOwn(STATUS_TONE, status) ? (status as KycStatus) : undefined;
 }
 
 function parseRisk(risk?: string): "low" | "medium" | "high" | undefined {
