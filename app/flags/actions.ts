@@ -8,9 +8,11 @@ import { requirePermission } from "@platform/auth";
 import { prisma } from "@platform/db";
 import {
   CREATE_PERMISSION,
+  STALE_STATE_MESSAGE,
   TransitionError,
   VIEW_PERMISSION,
   assertCanChangeEnv,
+  assertFresh,
   normalizeRollout,
   parseTargetUserIds,
   transitionAction,
@@ -21,48 +23,71 @@ function backTo(flagId: string, error?: string) {
   redirect(error ? `/flags/${flagId}?error=${encodeURIComponent(error)}` : `/flags/${flagId}?saved=1`);
 }
 
+/** The list, the detail page and the audit log all render the state a change touched. */
+function revalidateFlag(flagId: string) {
+  revalidatePath("/flags");
+  revalidatePath(`/flags/${flagId}`);
+  revalidatePath("/admin/audit");
+}
+
 function message(e: unknown): string {
   if (e instanceof TransitionError) return e.message;
   return e instanceof Error ? e.message : "Unexpected error";
 }
 
+type EnvValues = { enabled: boolean; rolloutPercentage: number; targetUserIds: string[] };
+
+/**
+ * Reads, authorizes and writes one environment state under optimistic
+ * concurrency: the row is re-read inside the transaction and the write is a
+ * compare-and-swap on `updatedAt`, so a save that raced a kill switch cannot
+ * reinstate the flag or record an audit diff against a snapshot it never saw.
+ */
 async function applyEnvChange(args: {
   flagId: string;
   env: FlagEnvName;
-  next: { enabled: boolean; rolloutPercentage: number; targetUserIds: string[] };
+  expectedUpdatedAt: unknown;
+  next: (current: EnvValues) => EnvValues;
   reason: string | null;
-  action: string;
+  action?: string;
 }) {
   const user = await requirePermission(VIEW_PERMISSION);
-  const state = await prisma.flagEnvState.findFirst({
-    where: { flagId: args.flagId, env: args.env as FlagEnv },
-    include: { flag: true },
-  });
-  if (!state) throw new TransitionError("Unknown environment state");
-
-  assertCanChangeEnv(user, {
-    env: args.env,
-    currentEnabled: state.enabled,
-    nextEnabled: args.next.enabled,
-    reason: args.reason,
-  });
-
-  const before = {
-    enabled: state.enabled,
-    rolloutPercentage: state.rolloutPercentage,
-    targetUserIds: state.targetUserIds,
-  };
 
   await prisma.$transaction(async (tx) => {
-    await tx.flagEnvState.update({ where: { id: state.id }, data: args.next });
+    const state = await tx.flagEnvState.findUnique({
+      where: { flagId_env: { flagId: args.flagId, env: args.env as FlagEnv } },
+    });
+    if (!state) throw new TransitionError("Unknown environment state");
+    assertFresh(args.expectedUpdatedAt, state.updatedAt);
+
+    const before: EnvValues = {
+      enabled: state.enabled,
+      rolloutPercentage: state.rolloutPercentage,
+      targetUserIds: state.targetUserIds,
+    };
+    const next = args.next(before);
+
+    assertCanChangeEnv(user, {
+      env: args.env,
+      currentEnabled: before.enabled,
+      nextEnabled: next.enabled,
+      reason: args.reason,
+    });
+
+    const swapped = await tx.flagEnvState.updateMany({
+      where: { id: state.id, updatedAt: state.updatedAt },
+      data: next,
+    });
+    if (swapped.count === 0) throw new TransitionError(STALE_STATE_MESSAGE);
+
     await writeAudit(tx, user, {
       app: "flags",
       entityType: "FeatureFlag",
       entityId: args.flagId,
-      action: args.action,
+      action: args.action ?? transitionAction(args.env, before.enabled, next.enabled),
       reason: args.reason,
       before: { env: args.env, ...before },
-      after: { env: args.env, ...args.next },
+      after: { env: args.env, ...next },
     });
   });
 }
@@ -72,25 +97,23 @@ export async function updateEnvStateAction(formData: FormData) {
   const env = String(formData.get("env") ?? "") as FlagEnvName;
   try {
     const reason = String(formData.get("reason") ?? "").trim() || null;
-    const enabled = formData.get("enabled") === "on";
     const next = {
-      enabled,
+      enabled: formData.get("enabled") === "on",
       rolloutPercentage: normalizeRollout(formData.get("rolloutPercentage")),
       targetUserIds: parseTargetUserIds(formData.get("targetUserIds")),
     };
-    const state = await prisma.flagEnvState.findFirst({ where: { flagId, env: env as FlagEnv } });
     await applyEnvChange({
       flagId,
       env,
-      next,
+      expectedUpdatedAt: formData.get("expectedUpdatedAt"),
+      next: () => next,
       reason,
-      action: transitionAction(env, state?.enabled ?? false, enabled),
     });
   } catch (e) {
     if (isRedirect(e)) throw e;
     backTo(flagId, message(e));
   }
-  revalidatePath(`/flags/${flagId}`);
+  revalidateFlag(flagId);
   backTo(flagId);
 }
 
@@ -98,12 +121,11 @@ export async function updateEnvStateAction(formData: FormData) {
 export async function killSwitchAction(formData: FormData) {
   const flagId = String(formData.get("flagId") ?? "");
   try {
-    const state = await prisma.flagEnvState.findFirst({ where: { flagId, env: "PROD" } });
-    if (!state) throw new TransitionError("Unknown environment state");
     await applyEnvChange({
       flagId,
       env: "PROD",
-      next: { enabled: false, rolloutPercentage: 0, targetUserIds: state.targetUserIds },
+      expectedUpdatedAt: formData.get("expectedUpdatedAt"),
+      next: (current) => ({ enabled: false, rolloutPercentage: 0, targetUserIds: current.targetUserIds }),
       reason: "kill switch",
       action: "PROD:kill-switch",
     });
@@ -111,7 +133,7 @@ export async function killSwitchAction(formData: FormData) {
     if (isRedirect(e)) throw e;
     backTo(flagId, message(e));
   }
-  revalidatePath(`/flags/${flagId}`);
+  revalidateFlag(flagId);
   backTo(flagId);
 }
 
@@ -137,7 +159,7 @@ export async function setArchivedAction(formData: FormData) {
     if (isRedirect(e)) throw e;
     backTo(flagId, message(e));
   }
-  revalidatePath(`/flags/${flagId}`);
+  revalidateFlag(flagId);
   backTo(flagId);
 }
 
@@ -181,7 +203,7 @@ export async function createFlagAction(formData: FormData) {
     if (isRedirect(e)) throw e;
     redirect(`/flags/new?error=${encodeURIComponent(message(e))}`);
   }
-  revalidatePath("/flags");
+  revalidateFlag(flagId);
   redirect(`/flags/${flagId}`);
 }
 

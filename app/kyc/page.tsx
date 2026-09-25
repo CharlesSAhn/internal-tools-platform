@@ -16,6 +16,17 @@ const STATUS_TONE: Record<KycStatus, "neutral" | "info" | "success" | "danger" |
 
 const RISK_TONE = { low: "success", medium: "warning", high: "danger" } as const;
 
+const SEARCH_MAX_LENGTH = 100;
+
+function parseStatus(status?: string): KycStatus | undefined {
+  return status && Object.hasOwn(STATUS_TONE, status) ? (status as KycStatus) : undefined;
+}
+
+function parsePage(page?: string): number {
+  const n = Number(page);
+  return Number.isSafeInteger(n) && n >= 1 ? n : 1;
+}
+
 type Search = {
   status?: string;
   risk?: string;
@@ -31,17 +42,8 @@ function riskFilter(risk?: string): Prisma.KycCaseWhereInput {
   return {};
 }
 
-function parseStatus(status?: string): KycStatus | undefined {
-  return status && Object.hasOwn(STATUS_TONE, status) ? (status as KycStatus) : undefined;
-}
-
 function parseRisk(risk?: string): "low" | "medium" | "high" | undefined {
   return risk === "low" || risk === "medium" || risk === "high" ? risk : undefined;
-}
-
-function parsePage(page?: string): number {
-  const n = Number(page);
-  return Number.isSafeInteger(n) && n >= 1 ? n : 1;
 }
 
 export default async function KycQueuePage({ searchParams }: { searchParams: Promise<Search> }) {
@@ -49,16 +51,17 @@ export default async function KycQueuePage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const status = parseStatus(sp.status);
   const risk = parseRisk(sp.risk);
+  const q = sp.q?.slice(0, SEARCH_MAX_LENGTH);
 
   const where: Prisma.KycCaseWhereInput = {
     ...(status ? { status } : {}),
     ...riskFilter(risk),
     ...(sp.mine === "1" ? { assigneeId: user.id } : {}),
-    ...(sp.q
+    ...(q
       ? {
           OR: [
-            { reference: { contains: sp.q, mode: "insensitive" } },
-            { applicantName: { contains: sp.q, mode: "insensitive" } },
+            { reference: { contains: q, mode: "insensitive" } },
+            { applicantName: { contains: q, mode: "insensitive" } },
           ],
         }
       : {}),
@@ -84,7 +87,7 @@ export default async function KycQueuePage({ searchParams }: { searchParams: Pro
       ...(status ? { status } : {}),
       ...(risk ? { risk } : {}),
       ...(sp.mine === "1" ? { mine: "1" } : {}),
-      ...(sp.q ? { q: sp.q } : {}),
+      ...(q ? { q } : {}),
       page: String(p),
     })}`;
 

@@ -55,7 +55,13 @@ export async function transitionCaseAction(formData: FormData) {
         lastEscalatedById: action === "escalate" ? user.id : entity.lastEscalatedById,
       };
 
-      await tx.kycCase.update({ where: { id: caseId }, data: after });
+      const updated = await tx.kycCase.updateMany({
+        where: { id: caseId, status: entity.status, assigneeId: entity.assigneeId },
+        data: after,
+      });
+      if (updated.count === 0)
+        throw new TransitionError("This case changed while you were viewing it — reload and try again");
+
       await writeAudit(tx, user, {
         app: "kyc",
         entityType: "KycCase",
