@@ -58,7 +58,7 @@ export default async function SchemaPage({
                     <form action={saveMappingAction} className="flex items-center gap-2">
                       <input type="hidden" name="source" value={id} />
                       <input type="hidden" name="targetField" value={target} />
-                      <select name="sourceField" defaultValue={current ?? ""} className={inputClass}>
+                      <select key={current ?? "unmapped"} name="sourceField" defaultValue={current ?? ""} className={inputClass}>
                         {current ? null : <option value="">— pick a field —</option>}
                         {SOURCE_FIELDS.map((f) => (
                           <option key={f} value={f}>
