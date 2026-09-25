@@ -1,0 +1,10 @@
+[
+  { "id": "fixture-1", "name": "Amelia Hughes", "country": "GB" },
+  { "id": "fixture-2", "name": "Lukas Brandt", "country": "DE" },
+  { "id": "fixture-3", "name": "Chloe Moreau", "country": "FR" },
+  { "id": "fixture-4", "name": "Owen Carter", "country": "US" },
+  { "id": "fixture-5", "name": "Priya Nair", "country": "IN" },
+  { "id": "fixture-6", "name": "Sofia Rossi", "country": "GB" },
+  { "id": "fixture-7", "name": "Noah Fischer", "country": "DE" },
+  { "id": "fixture-8", "name": "Maya Laurent", "country": "FR" }
+]

@@ -12,6 +12,7 @@ export const apps: AppConfig[] = [kycApp, flagsApp];
 export const platformPermissions = [
   { key: "admin.audit.view", description: "Read the platform-wide audit log" },
   { key: "admin.users.view", description: "See users and their roles" },
+  { key: "admin.connectors.view", description: "See the connector catalog and pull from live connectors" },
 ];
 
 export function allPermissions() {

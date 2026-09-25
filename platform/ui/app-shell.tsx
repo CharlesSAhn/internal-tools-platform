@@ -26,6 +26,11 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                 Audit log
               </Link>
             ) : null}
+            {user?.permissions.includes("admin.connectors.view") ? (
+              <Link href="/admin/connectors" className="text-slate-600 hover:text-slate-900">
+                Connectors
+              </Link>
+            ) : null}
           </nav>
           {user ? (
             <div className="flex items-center gap-3 text-sm">

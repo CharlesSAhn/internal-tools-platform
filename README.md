@@ -37,7 +37,7 @@ always wiped and regenerated** — `prisma/seed.kyc.ts` deletes every case, docu
 
 ```bash
 npm run typecheck
-npm test                        # 110 tests; needs DATABASE_URL — server actions and /api/flags run against Postgres
+npm test                        # 127 tests; needs DATABASE_URL — server actions and /api/flags run against Postgres
 npm run build                   # do not run while `npm run dev` is using .next
 ```
 
@@ -47,11 +47,12 @@ CI (`.github/workflows/ci.yml`) runs the same three against a Postgres service o
 
 ```
 app/
-  (auth)/         sign-in/out server actions
-  admin/audit/    platform-wide audit explorer
-  kyc/            KYC application  (owned by one team/session)
-  flags/          Feature flag app (owned by one team/session)
-  api/flags/      token-authenticated flag read API for services
+  (auth)/           sign-in/out server actions
+  admin/audit/      platform-wide audit explorer
+  admin/connectors/ connector catalog (one live HTTP connector)
+  kyc/              KYC application  (owned by one team/session)
+  flags/            Feature flag app (owned by one team/session)
+  api/flags/        token-authenticated flag read API for services
 platform/
   auth/       session + getCurrentUser + requirePermission
   rbac/       permission resolution, can(), four-eyes helper
@@ -59,6 +60,7 @@ platform/
   workflow/   declarative state machine with permission guards
   ui/         AppShell, DataTable, form primitives, audit timeline
   registry/   app catalog: nav + permission declarations
+  connectors/ connector catalog: one live HTTP source + disabled placeholders
   db/         Prisma client
 prisma/
   schema/       core.prisma + one schema file per app
