@@ -133,28 +133,24 @@ export async function seedFlags() {
   }
 
   for (const f of FLAGS) {
-    const existing = await prisma.featureFlag.findUnique({
+    const flag = await prisma.featureFlag.upsert({
       where: { key: f.key },
+      update: {},
+      create: {
+        key: f.key,
+        description: f.description,
+        ownerEmail: f.ownerEmail,
+        archived: f.archived ?? false,
+        envStates: { create: envRows(f) },
+      },
       include: { envStates: true },
     });
 
-    if (!existing) {
-      await prisma.featureFlag.create({
-        data: {
-          key: f.key,
-          description: f.description,
-          ownerEmail: f.ownerEmail,
-          archived: f.archived ?? false,
-          envStates: { create: envRows(f) },
-        },
-      });
-      continue;
-    }
-
-    const missing = envRows(f).filter((row) => !existing.envStates.some((s) => s.env === row.env));
+    const missing = envRows(f).filter((row) => !flag.envStates.some((s) => s.env === row.env));
     if (missing.length > 0) {
       await prisma.flagEnvState.createMany({
-        data: missing.map((row) => ({ flagId: existing.id, ...row })),
+        data: missing.map((row) => ({ flagId: flag.id, ...row })),
+        skipDuplicates: true,
       });
     }
   }
