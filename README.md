@@ -27,6 +27,9 @@ npm run db:seed
 npm run dev                     # http://localhost:3000
 ```
 
+After pulling a change that touches `prisma/schema/*`, re-run `npx prisma db push` (it also regenerates the Prisma
+client) and restart the dev server; otherwise new models are `undefined` at runtime.
+
 Sign in from `/login` by picking a seeded user — the demo has no external IdP (see "Authentication" below).
 
 Seeding is only partly additive. Users, roles, permissions and feature flags are upserted, so flag configuration
