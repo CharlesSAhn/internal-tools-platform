@@ -133,24 +133,29 @@ export async function seedFlags() {
   }
 
   for (const f of FLAGS) {
-    const flag = await prisma.featureFlag.upsert({
+    const existing = await prisma.featureFlag.findUnique({
       where: { key: f.key },
-      update: { description: f.description, ownerEmail: f.ownerEmail },
-      create: {
-        key: f.key,
-        description: f.description,
-        ownerEmail: f.ownerEmail,
-        archived: f.archived ?? false,
-      },
+      include: { envStates: true },
     });
 
-    for (const row of envRows(f)) {
-      const existing = await prisma.flagEnvState.findUnique({
-        where: { flagId_env: { flagId: flag.id, env: row.env } },
+    if (!existing) {
+      await prisma.featureFlag.create({
+        data: {
+          key: f.key,
+          description: f.description,
+          ownerEmail: f.ownerEmail,
+          archived: f.archived ?? false,
+          envStates: { create: envRows(f) },
+        },
       });
-      if (!existing) {
-        await prisma.flagEnvState.create({ data: { flagId: flag.id, ...row } });
-      }
+      continue;
+    }
+
+    const missing = envRows(f).filter((row) => !existing.envStates.some((s) => s.env === row.env));
+    if (missing.length > 0) {
+      await prisma.flagEnvState.createMany({
+        data: missing.map((row) => ({ flagId: existing.id, ...row })),
+      });
     }
   }
   console.log(
