@@ -11,6 +11,8 @@ export type TargetField = (typeof TARGET_FIELDS)[number];
  */
 export type Mapping = Partial<Record<TargetField, string>>;
 export type Applicant = Record<TargetField, string> & { riskScore: number };
+/** `null`: the column is mapped but the source record has no value at the mapped path(s). */
+export type MappedColumns = Record<TargetField, string | null>;
 
 export const DEFAULT_MAPPING: Required<Mapping> = {
   applicantName: "{name.first} {name.last}",
@@ -18,6 +20,8 @@ export const DEFAULT_MAPPING: Required<Mapping> = {
 };
 /** Value written when an admin has removed the mapping for a required column. */
 export const UNMAPPED = "UNMAPPED";
+/** Value written for a new case whose mapped source path is empty; existing cases keep their value. */
+export const MISSING = "MISSING";
 /** Row value meaning "admin explicitly unmapped this column"; distinct from a row that was never created. */
 export const NO_SOURCE = "";
 
@@ -43,11 +47,15 @@ export function templatePaths(template: string): string[] {
   return Array.from(template.matchAll(TOKEN), (m) => m[1]);
 }
 
-/** A usable template references at least one path and only paths the connector documents. */
+/**
+ * A usable template references at least one path, only paths the connector documents, and no stray
+ * braces: `{nat}{missing` or `{{nat}}` would otherwise leak literal brace text into a case.
+ */
 export function isValidTemplate(template: unknown, fields: readonly string[]): template is string {
   if (typeof template !== "string" || template.length > VALUE_MAX) return false;
   const paths = templatePaths(template);
-  return paths.length > 0 && paths.every((p) => fields.includes(p));
+  if (paths.length === 0 || !paths.every((p) => fields.includes(p))) return false;
+  return !/[{}]/.test(template.replace(TOKEN, ""));
 }
 
 export function readPath(raw: Record<string, unknown>, path: string): string {
@@ -73,7 +81,8 @@ export function defaultMappingRows(source: string) {
 /**
  * Materialises the default rows the first time a source is touched, so afterwards every target
  * field has exactly one row and the stored state is never ambiguous with "unconfigured".
- * Rows written by the earlier flattened editor are upgraded to raw-path templates in place.
+ * Rows written by the earlier flattened editor are upgraded to raw-path templates in place; the
+ * upgrade is conditional on the legacy value still being there so it cannot clobber a concurrent save.
  */
 export async function ensureMappingRows(tx: Tx, source: string) {
   const rows = await tx.sourceMapping.findMany({ where: { source }, orderBy: { targetField: "asc" } });
@@ -81,14 +90,17 @@ export async function ensureMappingRows(tx: Tx, source: string) {
     await tx.sourceMapping.createMany({ data: defaultMappingRows(source), skipDuplicates: true });
     return tx.sourceMapping.findMany({ where: { source }, orderBy: { targetField: "asc" } });
   }
+  let upgraded = false;
   for (const r of rows) {
-    const upgraded = upgradeLegacyValue(r.targetField, r.sourceField);
-    if (upgraded) {
-      await tx.sourceMapping.update({ where: { id: r.id }, data: { sourceField: upgraded } });
-      r.sourceField = upgraded;
-    }
+    const next = upgradeLegacyValue(r.targetField, r.sourceField);
+    if (!next) continue;
+    const { count } = await tx.sourceMapping.updateMany({
+      where: { id: r.id, sourceField: r.sourceField },
+      data: { sourceField: next },
+    });
+    upgraded ||= count > 0;
   }
-  return rows;
+  return upgraded ? tx.sourceMapping.findMany({ where: { source }, orderBy: { targetField: "asc" } }) : rows;
 }
 
 export async function loadMapping(connector: Pick<Connector, "id" | "fields">): Promise<Mapping> {
@@ -102,18 +114,29 @@ export async function loadMapping(connector: Pick<Connector, "id" | "fields">): 
   return mapping;
 }
 
-function column(mapping: Mapping, target: TargetField, raw: Record<string, unknown>): string {
+function column(mapping: Mapping, target: TargetField, raw: Record<string, unknown>): string | null {
   const template = mapping[target];
   if (!template) return UNMAPPED;
   const value = renderTemplate(template, raw);
-  if (!value) return UNMAPPED;
+  if (!value) return null;
   return target === "applicantCountry" && /^[a-z]{2}$/i.test(value) ? value.toUpperCase() : value;
 }
 
-export function applyMapping(mapping: Mapping, record: ConnectorRecord): Record<TargetField, string> {
+export function applyMapping(mapping: Mapping, record: ConnectorRecord): MappedColumns {
   return {
     applicantName: column(mapping, "applicantName", record.raw),
     applicantCountry: column(mapping, "applicantCountry", record.raw),
+  };
+}
+
+/** Resolve mapped columns against the case being written: an empty source keeps what is already there. */
+export function resolveColumns(
+  mapped: MappedColumns,
+  existing: Record<TargetField, string> | null,
+): Record<TargetField, string> {
+  return {
+    applicantName: mapped.applicantName ?? existing?.applicantName ?? MISSING,
+    applicantCountry: mapped.applicantCountry ?? existing?.applicantCountry ?? MISSING,
   };
 }
 

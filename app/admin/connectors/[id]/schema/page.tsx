@@ -8,6 +8,7 @@ import {
   CONNECTORS_PERMISSION,
   ensureMappingRows,
   isValidTemplate,
+  MISSING,
   readPath,
   renderTemplate,
   TARGET_FIELDS,
@@ -67,7 +68,7 @@ export default async function SchemaPage({
             {TARGET_FIELDS.map((target) => {
               const row = stored.get(target);
               const current = isValidTemplate(row?.sourceField, connector.fields) ? row!.sourceField : undefined;
-              const preview = current && sample ? renderTemplate(current, sample.raw) || UNMAPPED : UNMAPPED;
+              const preview = current && sample ? renderTemplate(current, sample.raw) || MISSING : UNMAPPED;
               return (
                 <tr key={target} className="border-b border-slate-100 last:border-0 align-top">
                   <td className="px-3 py-2 font-mono text-xs">{target}</td>

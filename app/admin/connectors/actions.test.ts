@@ -15,6 +15,7 @@ import {
   isUniqueViolation,
   legacyReferenceFor,
   loadMapping,
+  MISSING,
   referenceFor,
   syntheticRisk,
   UNMAPPED,
@@ -294,7 +295,7 @@ describe("pullIntoKycAction", () => {
 
       const bad = await schema(saveMappingAction, { targetField: "riskScore", sourceField: "{nat}" });
       expect(bad.params.get("error")).toBe("Unknown field");
-      for (const sourceField of ["id", "name", "{login.password}", "literal only", "{name.first", ""]) {
+      for (const sourceField of ["id", "name", "{login.password}", "literal only", "{name.first", "{nat}{missing", "{{nat}}", ""]) {
         const rejected = await schema(saveMappingAction, { targetField: "applicantName", sourceField });
         expect(rejected.params.get("error")).toMatch(/^Template must use only/);
       }
@@ -333,6 +334,29 @@ describe("pullIntoKycAction", () => {
     } finally {
       await captureRedirect(() => resetMappingAction(formData({ source: "random-user" })));
     }
+  });
+
+  it("keeps existing details when a mapped source path is empty, and writes MISSING for a new case", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    const uuid = `sparse-${Math.random().toString(36).slice(2, 10)}`;
+    const respond = (results: unknown[]) => {
+      globalThis.fetch = (async () => ({ ok: true, json: async () => ({ results }) }) as Response) as unknown as typeof globalThis.fetch;
+    };
+    const pull = () => captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" })));
+
+    respond([{ login: { uuid }, nat: "GB" }]);
+    const [created] = await casesCreatedBy(pull);
+    expect(created.applicantName).toBe(MISSING);
+    expect(created.applicantCountry).toBe("GB");
+
+    respond([{ login: { uuid }, name: { first: "Ada", last: "Lovelace" }, nat: "GB" }]);
+    await pull();
+    respond([{ login: { uuid } }]);
+    await pull();
+    const after = await prisma.kycCase.findUniqueOrThrow({ where: { id: created.id } });
+    expect(after.applicantName).toBe("Ada Lovelace");
+    expect(after.applicantCountry).toBe("GB");
   });
 
   it("upgrades mapping rows stored by the flattened editor to raw-path templates", async () => {

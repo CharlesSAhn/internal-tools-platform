@@ -13,8 +13,10 @@ import {
   legacyReferenceFor,
   loadMapping,
   referenceFor,
+  resolveColumns,
   syntheticRisk,
   type Applicant,
+  type MappedColumns,
 } from "./import";
 
 type Outcome = "imported" | "updated" | "skipped";
@@ -35,11 +37,12 @@ export async function pullIntoKycAction(formData: FormData) {
    * One transaction per record, reading the case inside it so the audit `before` is the row that
    * was actually replaced rather than a snapshot taken before the transaction began.
    */
-  async function applyRecord(record: ConnectorRecord, applicant: Applicant): Promise<Outcome> {
+  async function applyRecord(record: ConnectorRecord, mapped: MappedColumns): Promise<Outcome> {
     const key = { source: connector!.id, sourceId: record.id };
     return prisma.$transaction(async (tx) => {
       const existing =
         (await tx.kycCase.findUnique({ where: { source_sourceId: key } })) ?? (await adoptLegacy(tx, record));
+      const applicant: Applicant = { ...resolveColumns(mapped, existing), riskScore: syntheticRisk(record.id) };
       if (!existing) {
         const row = await tx.kycCase.create({ data: { ...key, ...applicant, reference: `pending-${record.id}`, status: "NEW" } });
         const created = await tx.kycCase.update({
@@ -98,15 +101,15 @@ export async function pullIntoKycAction(formData: FormData) {
   let imported = 0;
   let updated = 0;
   for (const record of records) {
-    const applicant = { ...applyMapping(mapping, record), riskScore: syntheticRisk(record.id) };
+    const mapped = applyMapping(mapping, record);
 
     let outcome: Outcome;
     try {
-      outcome = await applyRecord(record, applicant);
+      outcome = await applyRecord(record, mapped);
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       /** A concurrent pull inserted this source record first: retry, which now takes the refresh path. */
-      outcome = await applyRecord(record, applicant);
+      outcome = await applyRecord(record, mapped);
     }
 
     if (outcome === "imported") imported += 1;
