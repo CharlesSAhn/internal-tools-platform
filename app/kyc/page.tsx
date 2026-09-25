@@ -16,6 +16,17 @@ const STATUS_TONE: Record<KycStatus, "neutral" | "info" | "success" | "danger" |
 
 const RISK_TONE = { low: "success", medium: "warning", high: "danger" } as const;
 
+const SEARCH_MAX_LENGTH = 100;
+
+function parseStatus(status?: string): KycStatus | undefined {
+  return status && status in STATUS_TONE ? (status as KycStatus) : undefined;
+}
+
+function parsePage(page?: string): number {
+  const n = Number(page);
+  return Number.isSafeInteger(n) && n >= 1 ? n : 1;
+}
+
 type Search = {
   status?: string;
   risk?: string;
@@ -34,17 +45,19 @@ function riskFilter(risk?: string): Prisma.KycCaseWhereInput {
 export default async function KycQueuePage({ searchParams }: { searchParams: Promise<Search> }) {
   const user = await requirePermission("kyc.app.view");
   const sp = await searchParams;
-  const page = Math.max(1, Number(sp.page ?? 1) || 1);
+  const page = parsePage(sp.page);
+  const status = parseStatus(sp.status);
+  const q = sp.q?.slice(0, SEARCH_MAX_LENGTH);
 
   const where: Prisma.KycCaseWhereInput = {
-    ...(sp.status ? { status: sp.status as KycStatus } : {}),
+    ...(status ? { status } : {}),
     ...riskFilter(sp.risk),
     ...(sp.mine === "1" ? { assigneeId: user.id } : {}),
-    ...(sp.q
+    ...(q
       ? {
           OR: [
-            { reference: { contains: sp.q, mode: "insensitive" } },
-            { applicantName: { contains: sp.q, mode: "insensitive" } },
+            { reference: { contains: q, mode: "insensitive" } },
+            { applicantName: { contains: q, mode: "insensitive" } },
           ],
         }
       : {}),
@@ -66,10 +79,10 @@ export default async function KycQueuePage({ searchParams }: { searchParams: Pro
 
   const hrefFor = (p: number) =>
     `/kyc?${new URLSearchParams({
-      ...(sp.status ? { status: sp.status } : {}),
+      ...(status ? { status } : {}),
       ...(sp.risk ? { risk: sp.risk } : {}),
       ...(sp.mine === "1" ? { mine: "1" } : {}),
-      ...(sp.q ? { q: sp.q } : {}),
+      ...(q ? { q } : {}),
       page: String(p),
     })}`;
 

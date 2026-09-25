@@ -31,35 +31,42 @@ async function applyEnvChange(args: {
   env: FlagEnvName;
   next: { enabled: boolean; rolloutPercentage: number; targetUserIds: string[] };
   reason: string | null;
-  action: string;
+  /** Named from the state read inside the transaction, not from the rendered form. */
+  action: (currentEnabled: boolean) => string;
 }) {
   const user = await requirePermission(VIEW_PERMISSION);
-  const state = await prisma.flagEnvState.findFirst({
-    where: { flagId: args.flagId, env: args.env as FlagEnv },
-    include: { flag: true },
-  });
-  if (!state) throw new TransitionError("Unknown environment state");
-
-  assertCanChangeEnv(user, {
-    env: args.env,
-    currentEnabled: state.enabled,
-    nextEnabled: args.next.enabled,
-    reason: args.reason,
-  });
-
-  const before = {
-    enabled: state.enabled,
-    rolloutPercentage: state.rolloutPercentage,
-    targetUserIds: state.targetUserIds,
-  };
 
   await prisma.$transaction(async (tx) => {
-    await tx.flagEnvState.update({ where: { id: state.id }, data: args.next });
+    const state = await tx.flagEnvState.findFirst({
+      where: { flagId: args.flagId, env: args.env as FlagEnv },
+    });
+    if (!state) throw new TransitionError("Unknown environment state");
+
+    assertCanChangeEnv(user, {
+      env: args.env,
+      currentEnabled: state.enabled,
+      nextEnabled: args.next.enabled,
+      reason: args.reason,
+    });
+
+    const before = {
+      enabled: state.enabled,
+      rolloutPercentage: state.rolloutPercentage,
+      targetUserIds: state.targetUserIds,
+    };
+
+    const updated = await tx.flagEnvState.updateMany({
+      where: { id: state.id, updatedAt: state.updatedAt },
+      data: args.next,
+    });
+    if (updated.count === 0)
+      throw new TransitionError("This flag changed while you were editing it — reload and try again");
+
     await writeAudit(tx, user, {
       app: "flags",
       entityType: "FeatureFlag",
       entityId: args.flagId,
-      action: args.action,
+      action: args.action(state.enabled),
       reason: args.reason,
       before: { env: args.env, ...before },
       after: { env: args.env, ...args.next },
@@ -78,13 +85,12 @@ export async function updateEnvStateAction(formData: FormData) {
       rolloutPercentage: normalizeRollout(formData.get("rolloutPercentage")),
       targetUserIds: parseTargetUserIds(formData.get("targetUserIds")),
     };
-    const state = await prisma.flagEnvState.findFirst({ where: { flagId, env: env as FlagEnv } });
     await applyEnvChange({
       flagId,
       env,
       next,
       reason,
-      action: transitionAction(env, state?.enabled ?? false, enabled),
+      action: (currentEnabled) => transitionAction(env, currentEnabled, enabled),
     });
   } catch (e) {
     if (isRedirect(e)) throw e;
@@ -105,7 +111,7 @@ export async function killSwitchAction(formData: FormData) {
       env: "PROD",
       next: { enabled: false, rolloutPercentage: 0, targetUserIds: state.targetUserIds },
       reason: "kill switch",
-      action: "PROD:kill-switch",
+      action: () => "PROD:kill-switch",
     });
   } catch (e) {
     if (isRedirect(e)) throw e;

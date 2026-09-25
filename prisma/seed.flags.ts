@@ -118,6 +118,7 @@ const FLAGS: FlagSeed[] = [
 ];
 
 export async function seedFlags() {
+  await prisma.auditEvent.deleteMany({ where: { app: "flags" } });
   await prisma.flagEnvState.deleteMany({});
   await prisma.featureFlag.deleteMany({});
 
