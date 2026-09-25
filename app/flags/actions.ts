@@ -23,6 +23,13 @@ function backTo(flagId: string, error?: string) {
   redirect(error ? `/flags/${flagId}?error=${encodeURIComponent(error)}` : `/flags/${flagId}?saved=1`);
 }
 
+/** The list page renders each environment's state, so it goes stale with the detail page. */
+function revalidateFlag(flagId: string) {
+  revalidatePath(`/flags/${flagId}`);
+  revalidatePath("/flags");
+  revalidatePath("/admin/audit");
+}
+
 function message(e: unknown): string {
   if (e instanceof TransitionError) return e.message;
   return e instanceof Error ? e.message : "Unexpected error";
@@ -106,7 +113,7 @@ export async function updateEnvStateAction(formData: FormData) {
     if (isRedirect(e)) throw e;
     backTo(flagId, message(e));
   }
-  revalidatePath(`/flags/${flagId}`);
+  revalidateFlag(flagId);
   backTo(flagId);
 }
 
@@ -126,7 +133,7 @@ export async function killSwitchAction(formData: FormData) {
     if (isRedirect(e)) throw e;
     backTo(flagId, message(e));
   }
-  revalidatePath(`/flags/${flagId}`);
+  revalidateFlag(flagId);
   backTo(flagId);
 }
 
@@ -152,7 +159,7 @@ export async function setArchivedAction(formData: FormData) {
     if (isRedirect(e)) throw e;
     backTo(flagId, message(e));
   }
-  revalidatePath(`/flags/${flagId}`);
+  revalidateFlag(flagId);
   backTo(flagId);
 }
 
