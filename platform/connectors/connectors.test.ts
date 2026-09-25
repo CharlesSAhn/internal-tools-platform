@@ -115,7 +115,7 @@ describe("live connector failure handling", () => {
     mockFetch(spy as unknown as typeof globalThis.fetch);
     await listRandomUsers();
     const [url, init] = spy.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("https://randomuser.me/api/?results=8&nat=us,gb,de,fr,in");
+    expect(url).toBe("https://randomuser.me/api/?results=8&nat=us,gb,de,fr,in&seed=internal-tools-demo");
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 });

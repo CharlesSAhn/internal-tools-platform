@@ -1,7 +1,9 @@
 import fixtureRecords from "./fixtures/applicants.json";
 import type { Connector, ConnectorRecord } from "./types";
 
-export const RANDOM_USER_URL = "https://randomuser.me/api/?results=8&nat=us,gb,de,fr,in";
+/** Seeded so every pull returns the same eight people and a re-pull updates rather than inserts. */
+export const RANDOM_USER_URL =
+  "https://randomuser.me/api/?results=8&nat=us,gb,de,fr,in&seed=internal-tools-demo";
 export const REQUEST_TIMEOUT_MS = 2000;
 
 type ApiUser = {

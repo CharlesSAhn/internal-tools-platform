@@ -114,7 +114,44 @@ describe("pullIntoKycAction", () => {
     const second = await captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" })));
     expect(first.params.get("imported")).toBe("1");
     expect(second.params.get("imported")).toBe("0");
+    expect(second.params.get("updated")).toBe("0");
     expect(second.params.get("seen")).toBe("1");
+  });
+
+  it("updates the existing case when the source record changed", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+
+    const uuid = `changing-${Math.random().toString(36).slice(2, 10)}`;
+    const respondWith = (last: string, nat: string) => {
+      globalThis.fetch = (async () =>
+        ({
+          ok: true,
+          json: async () => ({ results: [{ login: { uuid }, name: { first: "Changing", last }, nat }] }),
+        }) as Response) as unknown as typeof globalThis.fetch;
+    };
+
+    respondWith("Before", "FR");
+    const created = await casesCreatedBy(() =>
+      captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" }))),
+    );
+    expect(created).toHaveLength(1);
+
+    respondWith("After", "GB");
+    const second = await casesCreatedBy(async () => {
+      const redirected = await captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" })));
+      expect(redirected.params.get("imported")).toBe("0");
+      expect(redirected.params.get("updated")).toBe("1");
+    });
+    expect(second).toHaveLength(0);
+
+    const updated = await prisma.kycCase.findUniqueOrThrow({ where: { reference: created[0].reference } });
+    expect(updated.applicantName).toBe("Changing After");
+    expect(updated.applicantCountry).toBe("GB");
+    expect(updated.status).toBe("NEW");
+
+    const events = await prisma.auditEvent.findMany({ where: { entityId: updated.id } });
+    expect(events).toHaveLength(2);
   });
 
   it("writes an audit row for every imported case", async () => {

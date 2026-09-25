@@ -73,7 +73,7 @@ function DisabledCard({ connector }: { connector: Connector }) {
 export default async function ConnectorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ imported?: string; seen?: string; error?: string }>;
+  searchParams: Promise<{ imported?: string; updated?: string; seen?: string; error?: string }>;
 }) {
   await requirePermission(CONNECTORS_PERMISSION);
   const sp = await searchParams;
@@ -91,7 +91,8 @@ export default async function ConnectorsPage({
       {sp.error ? <ErrorText>{sp.error}</ErrorText> : null}
       {sp.imported ? (
         <p className="text-sm text-slate-700">
-          Imported {sp.imported} new KYC case{sp.imported === "1" ? "" : "s"} from {sp.seen ?? "?"} records.
+          {sp.seen ?? "?"} records pulled: {sp.imported} new KYC case{sp.imported === "1" ? "" : "s"},{" "}
+          {sp.updated ?? "0"} updated.
         </p>
       ) : null}
       <div className="grid gap-4 md:grid-cols-2">

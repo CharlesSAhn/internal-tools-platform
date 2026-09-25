@@ -20,21 +20,44 @@ export async function pullIntoKycAction(formData: FormData) {
   const records = await connector.listRecords();
 
   let imported = 0;
+  let updated = 0;
   for (const record of records) {
     const reference = referenceFor(connector.id, record.id);
-    if (await prisma.kycCase.findUnique({ where: { reference }, select: { id: true } })) continue;
-    /** One transaction per record: a concurrent pull losing the unique race skips that record, not the batch. */
+    const applicant = {
+      applicantName: record.name,
+      applicantCountry: record.country,
+      riskScore: syntheticRisk(record.id),
+    };
+    /** One transaction per record: a concurrent pull losing the unique race retries as an update, not a failed batch. */
     try {
-      await prisma.$transaction(async (tx) => {
-        const created = await tx.kycCase.create({
-          data: {
-            reference,
-            applicantName: record.name,
-            applicantCountry: record.country,
-            riskScore: syntheticRisk(record.id),
-            status: "NEW",
-          },
+      const existing = await prisma.kycCase.findUnique({ where: { reference } });
+      if (existing) {
+        const unchanged =
+          existing.applicantName === applicant.applicantName &&
+          existing.applicantCountry === applicant.applicantCountry &&
+          existing.riskScore === applicant.riskScore;
+        if (unchanged) continue;
+        await prisma.$transaction(async (tx) => {
+          const next = await tx.kycCase.update({ where: { reference }, data: applicant });
+          await writeAudit(tx, user, {
+            app: "kyc",
+            entityType: "KycCase",
+            entityId: next.id,
+            action: `import:${connector.id}`,
+            before: {
+              applicantName: existing.applicantName,
+              applicantCountry: existing.applicantCountry,
+              riskScore: existing.riskScore,
+            },
+            after: { reference, ...applicant },
+          });
         });
+        updated += 1;
+        continue;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const created = await tx.kycCase.create({ data: { reference, ...applicant, status: "NEW" } });
         await writeAudit(tx, user, {
           app: "kyc",
           entityType: "KycCase",
@@ -52,5 +75,5 @@ export async function pullIntoKycAction(formData: FormData) {
   revalidatePath("/admin/connectors");
   revalidatePath("/kyc");
   revalidatePath("/admin/audit");
-  redirect(`/admin/connectors?imported=${imported}&seen=${records.length}`);
+  redirect(`/admin/connectors?imported=${imported}&updated=${updated}&seen=${records.length}`);
 }
