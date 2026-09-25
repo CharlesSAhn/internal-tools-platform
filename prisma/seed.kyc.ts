@@ -48,13 +48,15 @@ export async function seedKyc() {
   await prisma.auditEvent.deleteMany({ where: { app: "kyc" } });
   await prisma.kycDocument.deleteMany({});
   await prisma.kycCase.deleteMany({});
-  await prisma.sourceMapping.deleteMany({ where: { source: "random-user" } });
-  await prisma.sourceMapping.createMany({
-    data: [
-      { source: "random-user", targetField: "applicantName", sourceField: "name" },
-      { source: "random-user", targetField: "applicantCountry", sourceField: "country" },
-    ],
-  });
+  // Admin-edited mappings are configuration, not demo data: only install defaults where none exist.
+  if ((await prisma.sourceMapping.count({ where: { source: "random-user" } })) === 0) {
+    await prisma.sourceMapping.createMany({
+      data: [
+        { source: "random-user", targetField: "applicantName", sourceField: "name" },
+        { source: "random-user", targetField: "applicantCountry", sourceField: "country" },
+      ],
+    });
+  }
 
   const rand = rng(20240917);
   const base = Date.UTC(2025, 7, 1);

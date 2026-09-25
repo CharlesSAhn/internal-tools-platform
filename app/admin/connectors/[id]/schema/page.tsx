@@ -4,7 +4,7 @@ import { requirePermission } from "@platform/auth";
 import { getConnector } from "@platform/connectors";
 import { prisma } from "@platform/db";
 import { Badge, Button, Card, ErrorText, PageHeader, inputClass } from "@platform/ui";
-import { CONNECTORS_PERMISSION, DEFAULT_MAPPING, SOURCE_FIELDS, TARGET_FIELDS, UNMAPPED } from "../../import";
+import { CONNECTORS_PERMISSION, ensureMappingRows, isSourceField, SOURCE_FIELDS, TARGET_FIELDS, UNMAPPED } from "../../import";
 import { deleteMappingAction, resetMappingAction, saveMappingAction } from "./actions";
 
 export default async function SchemaPage({
@@ -19,9 +19,8 @@ export default async function SchemaPage({
   const connector = getConnector(id);
   if (!connector) notFound();
 
-  const rows = await prisma.sourceMapping.findMany({ where: { source: id }, orderBy: { targetField: "asc" } });
+  const rows = await ensureMappingRows(prisma, id);
   const stored = new Map(rows.map((r) => [r.targetField, r]));
-  const usingDefaults = rows.length === 0;
 
   return (
     <>
@@ -37,12 +36,7 @@ export default async function SchemaPage({
       {sp.error ? <ErrorText>{sp.error}</ErrorText> : null}
       <Card>
         <p className="mb-3 text-sm text-slate-600">
-          Source record shape: <code className="font-mono text-xs">{`{ ${SOURCE_FIELDS.join(", ")} }`}</code>.{" "}
-          {usingDefaults ? (
-            <>
-              No stored rows — <Badge tone="neutral">built-in defaults</Badge> apply.
-            </>
-          ) : null}
+          Source record shape: <code className="font-mono text-xs">{`{ ${SOURCE_FIELDS.join(", ")} }`}</code>.
         </p>
         <table className="w-full text-left text-sm">
           <thead>
@@ -56,7 +50,7 @@ export default async function SchemaPage({
           <tbody>
             {TARGET_FIELDS.map((target) => {
               const row = stored.get(target);
-              const current = row?.sourceField ?? (usingDefaults ? DEFAULT_MAPPING[target] : undefined);
+              const current = isSourceField(row?.sourceField) ? row.sourceField : undefined;
               return (
                 <tr key={target} className="border-b border-slate-100 last:border-0">
                   <td className="px-3 py-2 font-mono text-xs">{target}</td>
@@ -85,7 +79,7 @@ export default async function SchemaPage({
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {row ? (
+                    {current ? (
                       <form action={deleteMappingAction}>
                         <input type="hidden" name="source" value={id} />
                         <input type="hidden" name="targetField" value={target} />

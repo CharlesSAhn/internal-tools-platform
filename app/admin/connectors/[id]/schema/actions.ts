@@ -6,7 +6,15 @@ import { requirePermission } from "@platform/auth";
 import { writeAudit } from "@platform/audit";
 import { getConnector } from "@platform/connectors";
 import { prisma } from "@platform/db";
-import { CONNECTORS_PERMISSION, DEFAULT_MAPPING, isSourceField, isTargetField, TARGET_FIELDS } from "../../import";
+import {
+  CONNECTORS_PERMISSION,
+  DEFAULT_MAPPING,
+  defaultMappingRows,
+  ensureMappingRows,
+  isSourceField,
+  isTargetField,
+  NO_SOURCE,
+} from "../../import";
 
 function schemaPath(source: string, error?: string) {
   return `/admin/connectors/${source}/schema${error ? `?error=${encodeURIComponent(error)}` : ""}`;
@@ -33,8 +41,30 @@ export async function saveMappingAction(formData: FormData) {
     redirect(schemaPath(source, "Unknown field"));
   }
 
+  await setSource(source, user, targetField, sourceField, "mapping.save");
+  done(source);
+}
+
+/** "Delete" keeps the row and blanks its source, so the unmapped choice survives reloads and reseeds. */
+export async function deleteMappingAction(formData: FormData) {
+  const { source, user } = await guard(formData);
+  const targetField = formData.get("targetField");
+  if (!isTargetField(targetField)) redirect(schemaPath(source, "Unknown field"));
+
+  await setSource(source, user, targetField, NO_SOURCE, "mapping.delete");
+  done(source);
+}
+
+async function setSource(
+  source: string,
+  user: Awaited<ReturnType<typeof requirePermission>>,
+  targetField: string,
+  sourceField: string,
+  action: "mapping.save" | "mapping.delete",
+) {
   await prisma.$transaction(async (tx) => {
-    const before = await tx.sourceMapping.findUnique({ where: { source_targetField: { source, targetField } } });
+    const rows = await ensureMappingRows(tx, source);
+    const before = rows.find((r) => r.targetField === targetField);
     const row = await tx.sourceMapping.upsert({
       where: { source_targetField: { source, targetField } },
       create: { source, targetField, sourceField },
@@ -44,32 +74,11 @@ export async function saveMappingAction(formData: FormData) {
       app: "admin",
       entityType: "SourceMapping",
       entityId: row.id,
-      action: "mapping.save",
+      action,
       before: before ? { source, targetField, sourceField: before.sourceField } : undefined,
       after: { source, targetField, sourceField },
     });
   });
-  done(source);
-}
-
-export async function deleteMappingAction(formData: FormData) {
-  const { source, user } = await guard(formData);
-  const targetField = formData.get("targetField");
-  if (!isTargetField(targetField)) redirect(schemaPath(source, "Unknown field"));
-
-  await prisma.$transaction(async (tx) => {
-    const row = await tx.sourceMapping.findUnique({ where: { source_targetField: { source, targetField } } });
-    if (!row) return;
-    await tx.sourceMapping.delete({ where: { id: row.id } });
-    await writeAudit(tx, user, {
-      app: "admin",
-      entityType: "SourceMapping",
-      entityId: row.id,
-      action: "mapping.delete",
-      before: { source, targetField, sourceField: row.sourceField },
-    });
-  });
-  done(source);
 }
 
 export async function resetMappingAction(formData: FormData) {
@@ -78,9 +87,7 @@ export async function resetMappingAction(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const before = await tx.sourceMapping.findMany({ where: { source } });
     await tx.sourceMapping.deleteMany({ where: { source } });
-    await tx.sourceMapping.createMany({
-      data: TARGET_FIELDS.map((t) => ({ source, targetField: t, sourceField: DEFAULT_MAPPING[t] })),
-    });
+    await tx.sourceMapping.createMany({ data: defaultMappingRows(source) });
     await writeAudit(tx, user, {
       app: "admin",
       entityType: "SourceMapping",

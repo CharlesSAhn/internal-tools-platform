@@ -9,7 +9,14 @@ import { captureRedirect, formData } from "@/test/next-mocks";
 import { cleanupFixtures, makeUser, signIn, signOut } from "@/test/fixtures";
 import { pullIntoKycAction } from "./actions";
 import { deleteMappingAction, resetMappingAction, saveMappingAction } from "./[id]/schema/actions";
-import { CONNECTORS_PERMISSION, isUniqueViolation, referenceFor, syntheticRisk, UNMAPPED } from "./import";
+import {
+  CONNECTORS_PERMISSION,
+  isUniqueViolation,
+  legacyReferenceFor,
+  referenceFor,
+  syntheticRisk,
+  UNMAPPED,
+} from "./import";
 
 const realFetch = globalThis.fetch;
 const importedReferences: string[] = [];
@@ -256,15 +263,85 @@ describe("pullIntoKycAction", () => {
       await pull();
       row = await prisma.kycCase.findUniqueOrThrow({ where: { id: created[0].id } });
       expect(row.applicantCountry).toBe(UNMAPPED);
+      expect(row.applicantName).toBe("mapped-1");
+
+      // Unmapping the last mapped column must not fall back to defaults.
+      await schema(deleteMappingAction, { targetField: "applicantName" });
+      await pull();
+      row = await prisma.kycCase.findUniqueOrThrow({ where: { id: created[0].id } });
+      expect(row.applicantName).toBe(UNMAPPED);
+      expect(row.applicantCountry).toBe(UNMAPPED);
+
+      await schema(resetMappingAction, {});
+      await pull();
+      row = await prisma.kycCase.findUniqueOrThrow({ where: { id: created[0].id } });
+      expect(row.applicantName).toBe("Mapped Person");
+      expect(row.applicantCountry).toBe("IN");
 
       const bad = await schema(saveMappingAction, { targetField: "riskScore", sourceField: "id" });
       expect(bad.params.get("error")).toBe("Unknown field");
 
       const audits = await prisma.auditEvent.findMany({ where: { entityType: "SourceMapping", actorId: user.id } });
-      expect(audits.map((a) => a.action).sort()).toEqual(["mapping.delete", "mapping.reset", "mapping.save"]);
+      expect(audits.map((a) => a.action).sort()).toEqual([
+        "mapping.delete",
+        "mapping.delete",
+        "mapping.reset",
+        "mapping.reset",
+        "mapping.save",
+      ]);
+      expect(audits.find((a) => a.action === "mapping.delete")?.after).toMatchObject({ sourceField: "" });
     } finally {
       await schema(resetMappingAction, {});
     }
+  });
+
+  it("materialises the other default when the first edit happens on an unconfigured source", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    try {
+      await prisma.sourceMapping.deleteMany({ where: { source: "random-user" } });
+      await captureRedirect(() =>
+        saveMappingAction(formData({ source: "random-user", targetField: "applicantName", sourceField: "id" })),
+      );
+      const rows = await prisma.sourceMapping.findMany({ where: { source: "random-user" }, orderBy: { targetField: "asc" } });
+      expect(rows.map((r) => [r.targetField, r.sourceField])).toEqual([
+        ["applicantCountry", "country"],
+        ["applicantName", "id"],
+      ]);
+    } finally {
+      await captureRedirect(() => resetMappingAction(formData({ source: "random-user" })));
+    }
+  });
+
+  it("adopts a case imported under the legacy reference scheme instead of duplicating it", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    const uuid = `legacy-${Math.random().toString(36).slice(2, 10)}`;
+    const legacy = await prisma.kycCase.create({
+      data: {
+        reference: legacyReferenceFor("random-user", uuid),
+        applicantName: "Old Import",
+        applicantCountry: "FR",
+        riskScore: 1,
+        status: "APPROVED",
+      },
+    });
+    importedReferences.push(legacy.reference);
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        json: async () => ({ results: [{ login: { uuid }, name: { first: "New", last: "Name" }, nat: "GB" }] }),
+      }) as Response) as unknown as typeof globalThis.fetch;
+
+    const created = await casesCreatedBy(() =>
+      captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" }))),
+    );
+    const after = await prisma.kycCase.findUniqueOrThrow({ where: { id: legacy.id } });
+    expect(created.map((c) => c.id)).toEqual([legacy.id]);
+    expect(after.source).toBe("random-user");
+    expect(after.sourceId).toBe(uuid);
+    expect(after.applicantName).toBe("Old Import");
+    expect(after.status).toBe("APPROVED");
   });
 
   it("refuses schema edits without admin.connectors.view", async () => {
