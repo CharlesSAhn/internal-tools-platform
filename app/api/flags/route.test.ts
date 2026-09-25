@@ -20,6 +20,7 @@ function authed(url: string) {
 
 let liveKey: string;
 let archivedKey: string;
+let offKey: string;
 let originalToken: string | undefined;
 
 beforeAll(async () => {
@@ -32,8 +33,10 @@ beforeAll(async () => {
     prod: { enabled: true, rolloutPercentage: 0, targetUserIds: [] },
   });
   const archived = await makeFlag({ archived: true, prod: { enabled: true, rolloutPercentage: 100 } });
+  const off = await makeFlag({ prod: { enabled: false, rolloutPercentage: 0, targetUserIds: [] } });
   liveKey = live.key;
   archivedKey = archived.key;
+  offKey = off.key;
 });
 
 afterAll(async () => {
@@ -61,6 +64,26 @@ describe("GET /api/flags authentication", () => {
   it("accepts a lowercase bearer scheme", async () => {
     const res = await GET(request("http://test.local/api/flags", { authorization: `bearer ${TOKEN}` }));
     expect(res.status).toBe(200);
+  });
+
+  it("rejects a token that only differs in case", async () => {
+    const res = await GET(request("http://test.local/api/flags", { authorization: `Bearer ${TOKEN.toUpperCase()}` }));
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a token that is a prefix of the real one", async () => {
+    const res = await GET(request("http://test.local/api/flags", { authorization: `Bearer ${TOKEN.slice(0, -1)}` }));
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects an empty Authorization header", async () => {
+    const res = await GET(request("http://test.local/api/flags", { authorization: "" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a Bearer scheme with no token", async () => {
+    const res = await GET(request("http://test.local/api/flags", { authorization: "Bearer " }));
+    expect(res.status).toBe(401);
   });
 
   it("rejects every request when the server has no token configured", async () => {
@@ -114,5 +137,39 @@ describe("GET /api/flags payload", () => {
   it("rejects an empty env parameter rather than silently defaulting", async () => {
     const res = await GET(authed("http://test.local/api/flags?env="));
     expect(res.status).toBe(400);
+  });
+
+  it("rejects an env that only looks like a real one", async () => {
+    for (const env of ["production", "pro d", "prod%20", "dev1"]) {
+      const res = await GET(authed(`http://test.local/api/flags?env=${encodeURIComponent(env)}`));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("reports a disabled flag rather than omitting it", async () => {
+    const body = (await (await GET(authed("http://test.local/api/flags?env=prod"))).json()) as FlagsBody;
+    expect(body.flags[offKey]).toEqual({ enabled: false, rolloutPercentage: 0, targetUserIds: [] });
+  });
+
+  it("ignores unknown query parameters and honours the first env value", async () => {
+    const body = (await (
+      await GET(authed("http://test.local/api/flags?env=dev&env=prod&debug=1"))
+    ).json()) as FlagsBody;
+    expect(body.env).toBe("dev");
+    expect(body.flags[liveKey].rolloutPercentage).toBe(100);
+  });
+
+  it("serves every environment with a consistent per-flag shape", async () => {
+    for (const env of ["dev", "staging", "prod"]) {
+      const res = await GET(authed(`http://test.local/api/flags?env=${env}`));
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as FlagsBody;
+      expect(body.env).toBe(env);
+      expect(Object.keys(body.flags[liveKey]).sort()).toEqual([
+        "enabled",
+        "rolloutPercentage",
+        "targetUserIds",
+      ]);
+    }
   });
 });

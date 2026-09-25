@@ -19,7 +19,7 @@ function mockApi(count: number) {
       ok: true,
       json: async () => ({
         results: Array.from({ length: count }, (_, i) => ({
-          login: { uuid: `test-uuid-${Math.random().toString(36).slice(2, 8)}${i}` },
+          login: { uuid: `${i}-${Math.random().toString(36).slice(2, 10)}-test` },
           name: { first: "Imported", last: `Applicant${i}` },
           nat: "DE",
         })),
@@ -159,6 +159,9 @@ describe("pullIntoKycAction", () => {
 describe("helpers", () => {
   it("derives a stable reference and a stable synthetic risk score", () => {
     expect(referenceFor("random-user", "abc-123-def")).toBe("RANDOM-USER-ABC123DEF");
+    expect(referenceFor("random-user", "8f6c1a2e-0000-4aaa-9bbb-ccccdddd0001")).not.toBe(
+      referenceFor("random-user", "8f6c1a2e-0000-4aaa-9bbb-ccccdddd0002"),
+    );
     expect(syntheticRisk("abc")).toBe(syntheticRisk("abc"));
     expect(syntheticRisk("abc")).toBeLessThan(100);
   });

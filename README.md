@@ -37,7 +37,7 @@ always wiped and regenerated** — `prisma/seed.kyc.ts` deletes every case, docu
 
 ```bash
 npm run typecheck
-npm test                        # 127 tests; needs DATABASE_URL — server actions and /api/flags run against Postgres
+npm test                        # 137 tests; needs DATABASE_URL — server actions and /api/flags run against Postgres
 npm run build                   # do not run while `npm run dev` is using .next
 ```
 

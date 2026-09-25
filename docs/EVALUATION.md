@@ -60,7 +60,7 @@ have CI, cron and code), and premium connectors these three tools are unlikely t
 | Machine-facing API — token-authenticated flag reads per environment | Built | `app/api/flags` |
 | Optimistic concurrency on both apps' writes | Built | `app/kyc/actions.ts`, `app/flags/actions.ts` |
 | Connector catalog — one live HTTP connector with fixture fallback, eight placeholders | Built | `platform/connectors`, `/admin/connectors` |
-| Tests — 127 across 11 files, including server actions and the API route against a real Postgres | Built | `*.test.ts`, `test/fixtures.ts` |
+| Tests — 137 across 12 files, including server actions and the API route against a real Postgres | Built | `*.test.ts`, `test/fixtures.ts` |
 | CI — Postgres service, typecheck, tests, production build on every PR | Built | `.github/workflows/ci.yml` |
 
 The second app is the evidence that matters. KYC and feature flags were built by two independent sessions in parallel

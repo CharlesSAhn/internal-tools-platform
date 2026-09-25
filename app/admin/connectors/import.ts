@@ -7,7 +7,8 @@ export function syntheticRisk(id: string): number {
   return h % 100;
 }
 
+/** Import key: stable per source record, so re-pulling the same record is a no-op. */
 export function referenceFor(connectorId: string, recordId: string): string {
-  const slug = recordId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10).toUpperCase();
+  const slug = recordId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 32).toUpperCase();
   return `${connectorId.toUpperCase()}-${slug}`;
 }
