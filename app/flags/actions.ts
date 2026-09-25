@@ -23,10 +23,10 @@ function backTo(flagId: string, error?: string) {
   redirect(error ? `/flags/${flagId}?error=${encodeURIComponent(error)}` : `/flags/${flagId}?saved=1`);
 }
 
-/** The list page renders each environment's state, so it goes stale with the detail page. */
+/** The list, the detail page and the audit log all render the state a change touched. */
 function revalidateFlag(flagId: string) {
-  revalidatePath(`/flags/${flagId}`);
   revalidatePath("/flags");
+  revalidatePath(`/flags/${flagId}`);
   revalidatePath("/admin/audit");
 }
 
@@ -203,7 +203,7 @@ export async function createFlagAction(formData: FormData) {
     if (isRedirect(e)) throw e;
     redirect(`/flags/new?error=${encodeURIComponent(message(e))}`);
   }
-  revalidatePath("/flags");
+  revalidateFlag(flagId);
   redirect(`/flags/${flagId}`);
 }
 
