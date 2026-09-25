@@ -1,0 +1,71 @@
+// Core platform schema. Owned by the platform; app sessions must not edit this file.
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["prismaSchemaFolder"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  roles     UserRole[]
+  createdAt DateTime @default(now())
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+// Permissions are declared in code (each app's app.config.ts) and synced to this
+// table by the seed so that role assignment can be managed as data.
+model Permission {
+  id    String @id @default(cuid())
+  key   String @unique
+  app   String
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+// Append-only. Written in the same transaction as the mutation it describes.
+model AuditEvent {
+  id         String   @id @default(cuid())
+  at         DateTime @default(now())
+  actorId    String
+  actorEmail String
+  app        String
+  entityType String
+  entityId   String
+  action     String
+  reason     String?
+  before     Json?
+  after      Json?
+
+  @@index([app, entityType, entityId])
+  @@index([at])
+}

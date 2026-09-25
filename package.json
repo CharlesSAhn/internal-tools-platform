@@ -1,0 +1,46 @@
+{
+  "name": "internal-tools-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "schema": "prisma/schema"
+  },
+  "dependencies": {
+    "@prisma/client": "6.1.0",
+    "clsx": "2.1.1",
+    "jose": "5.9.6",
+    "next": "^15.5.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/node": "22.10.2",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "prisma": "6.1.0",
+    "tailwindcss": "^4.1.13",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  },
+  "allowScripts": {
+    "prisma@6.1.0": true,
+    "@prisma/client@6.1.0": true,
+    "@prisma/engines@6.1.0": true,
+    "esbuild@0.23.1": true,
+    "esbuild@0.21.5": true,
+    "sharp@0.34.5": true
+  }
+}
