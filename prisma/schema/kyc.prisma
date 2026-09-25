@@ -10,7 +10,11 @@ enum KycStatus {
 
 model KycCase {
   id               String     @id @default(cuid())
+  caseNumber       Int        @unique @default(autoincrement())
   reference        String     @unique
+  // Where the case came from ("seed", "manual", or a connector id) and its id in that system.
+  source           String     @default("manual")
+  sourceId         String?
   applicantName    String
   applicantCountry String
   riskScore        Int
@@ -26,6 +30,18 @@ model KycCase {
   @@index([status])
   @@index([assigneeId])
   @@index([riskScore])
+  @@unique([source, sourceId])
+}
+
+// Admin-editable field mapping from a connector record onto KycCase columns.
+model SourceMapping {
+  id          String   @id @default(cuid())
+  source      String
+  sourceField String
+  targetField String
+  updatedAt   DateTime @updatedAt
+
+  @@unique([source, targetField])
 }
 
 model KycDocument {

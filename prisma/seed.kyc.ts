@@ -48,6 +48,13 @@ export async function seedKyc() {
   await prisma.auditEvent.deleteMany({ where: { app: "kyc" } });
   await prisma.kycDocument.deleteMany({});
   await prisma.kycCase.deleteMany({});
+  await prisma.sourceMapping.deleteMany({ where: { source: "random-user" } });
+  await prisma.sourceMapping.createMany({
+    data: [
+      { source: "random-user", targetField: "applicantName", sourceField: "name" },
+      { source: "random-user", targetField: "applicantCountry", sourceField: "country" },
+    ],
+  });
 
   const rand = rng(20240917);
   const base = Date.UTC(2025, 7, 1);
@@ -65,6 +72,7 @@ export async function seedKyc() {
     await prisma.kycCase.create({
       data: {
         reference: `KYC-${1000 + i}`,
+        source: "seed",
         applicantName: `${applicantName}${i >= APPLICANTS.length ? ` ${Math.floor(i / APPLICANTS.length) + 1}` : ""}`,
         applicantCountry,
         riskScore,

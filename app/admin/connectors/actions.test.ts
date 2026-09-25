@@ -8,7 +8,8 @@ import { prisma } from "@platform/db";
 import { captureRedirect, formData } from "@/test/next-mocks";
 import { cleanupFixtures, makeUser, signIn, signOut } from "@/test/fixtures";
 import { pullIntoKycAction } from "./actions";
-import { CONNECTORS_PERMISSION, isUniqueViolation, referenceFor, syntheticRisk } from "./import";
+import { deleteMappingAction, resetMappingAction, saveMappingAction } from "./[id]/schema/actions";
+import { CONNECTORS_PERMISSION, isUniqueViolation, referenceFor, syntheticRisk, UNMAPPED } from "./import";
 
 const realFetch = globalThis.fetch;
 const importedReferences: string[] = [];
@@ -28,7 +29,7 @@ function mockApi(count: number) {
 }
 
 async function importedCases() {
-  const cases = await prisma.kycCase.findMany({ where: { reference: { startsWith: "RANDOM-USER-" } } });
+  const cases = await prisma.kycCase.findMany({ where: { source: "random-user" } });
   for (const c of cases) importedReferences.push(c.reference);
   return cases;
 }
@@ -92,6 +93,10 @@ describe("pullIntoKycAction", () => {
       expect(c.status).toBe("NEW");
       expect(c.assigneeId).toBeNull();
       expect(c.applicantCountry).toBe("DE");
+      expect(c.source).toBe("random-user");
+      expect(c.sourceId).toMatch(/-test$/);
+      expect(c.reference).toBe(referenceFor(c.caseNumber));
+      expect(c.reference).toMatch(/^KYC-\d{6,}$/);
       expect(c.riskScore).toBeGreaterThanOrEqual(0);
       expect(c.riskScore).toBeLessThan(100);
     }
@@ -197,6 +202,80 @@ describe("pullIntoKycAction", () => {
     expect(events.every((e) => e.action === "import:random-user" && e.actorId === user.id)).toBe(true);
   });
 
+  it("records a per-pull summary row even when nothing changed", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    const fixed = {
+      ok: true,
+      json: async () => ({
+        results: ["summary-a", "summary-b"].map((uuid) => ({ login: { uuid }, name: { first: "S", last: uuid }, nat: "GB" })),
+      }),
+    } as Response;
+    globalThis.fetch = (async () => fixed) as unknown as typeof globalThis.fetch;
+
+    await captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" })));
+    await captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" })));
+
+    const pulls = await prisma.auditEvent.findMany({
+      where: { app: "admin", entityType: "Connector", entityId: "random-user", action: "pull", actorId: user.id },
+      orderBy: { at: "asc" },
+    });
+    expect(pulls).toHaveLength(2);
+    expect(pulls[0].after).toEqual({ seen: 2, imported: 2, updated: 0 });
+    expect(pulls[1].after).toEqual({ seen: 2, imported: 0, updated: 0 });
+  });
+
+  it("applies the admin-edited schema mapping and marks deleted mappings UNMAPPED", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    const fixed = {
+      ok: true,
+      json: async () => ({
+        results: [{ login: { uuid: "mapped-1" }, name: { first: "Mapped", last: "Person" }, nat: "IN" }],
+      }),
+    } as Response;
+    globalThis.fetch = (async () => fixed) as unknown as typeof globalThis.fetch;
+    const pull = () => captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" })));
+    const schema = (a: typeof saveMappingAction, extra: Record<string, string>) =>
+      captureRedirect(() => a(formData({ source: "random-user", ...extra })));
+
+    try {
+      await schema(resetMappingAction, {});
+      const created = await casesCreatedBy(pull);
+      expect(created).toHaveLength(1);
+      expect(created[0].applicantName).toBe("Mapped Person");
+
+      const saved = await schema(saveMappingAction, { targetField: "applicantName", sourceField: "id" });
+      expect(saved.path).toBe("/admin/connectors/random-user/schema");
+      await pull();
+      let row = await prisma.kycCase.findUniqueOrThrow({ where: { id: created[0].id } });
+      expect(row.applicantName).toBe("mapped-1");
+      expect(row.applicantCountry).toBe("IN");
+
+      await schema(deleteMappingAction, { targetField: "applicantCountry" });
+      await pull();
+      row = await prisma.kycCase.findUniqueOrThrow({ where: { id: created[0].id } });
+      expect(row.applicantCountry).toBe(UNMAPPED);
+
+      const bad = await schema(saveMappingAction, { targetField: "riskScore", sourceField: "id" });
+      expect(bad.params.get("error")).toBe("Unknown field");
+
+      const audits = await prisma.auditEvent.findMany({ where: { entityType: "SourceMapping", actorId: user.id } });
+      expect(audits.map((a) => a.action).sort()).toEqual(["mapping.delete", "mapping.reset", "mapping.save"]);
+    } finally {
+      await schema(resetMappingAction, {});
+    }
+  });
+
+  it("refuses schema edits without admin.connectors.view", async () => {
+    const user = await makeUser(["kyc.app.view"], "nonadmin");
+    await signIn(user.id);
+    const redirected = await captureRedirect(() =>
+      saveMappingAction(formData({ source: "random-user", targetField: "applicantName", sourceField: "id" })),
+    );
+    expect(redirected.path).toBe("/forbidden");
+  });
+
   it("survives two pulls racing on the same records", async () => {
     const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
     await signIn(user.id);
@@ -246,11 +325,9 @@ describe("pullIntoKycAction", () => {
 });
 
 describe("helpers", () => {
-  it("derives a stable reference and a stable synthetic risk score", () => {
-    expect(referenceFor("random-user", "abc-123-def")).toBe("RANDOM-USER-ABC123DEF");
-    expect(referenceFor("random-user", "8f6c1a2e-0000-4aaa-9bbb-ccccdddd0001")).not.toBe(
-      referenceFor("random-user", "8f6c1a2e-0000-4aaa-9bbb-ccccdddd0002"),
-    );
+  it("derives a standard reference and a stable synthetic risk score", () => {
+    expect(referenceFor(42)).toBe("KYC-000042");
+    expect(referenceFor(1234567)).toBe("KYC-1234567");
     expect(syntheticRisk("abc")).toBe(syntheticRisk("abc"));
     expect(syntheticRisk("abc")).toBeLessThan(100);
     expect(isUniqueViolation({ code: "P2002" })).toBe(true);

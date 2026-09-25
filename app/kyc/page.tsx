@@ -133,6 +133,7 @@ export default async function KycQueuePage({ searchParams }: { searchParams: Pro
             { header: "Reference", cell: (c) => c.reference },
             { header: "Applicant", cell: (c) => c.applicantName },
             { header: "Country", cell: (c) => c.applicantCountry },
+            { header: "Source", cell: (c) => <span className="text-slate-600">{c.source}</span> },
             {
               header: "Risk",
               cell: (c) => <Badge tone={RISK_TONE[riskBand(c.riskScore)]}>{c.riskScore}</Badge>,
