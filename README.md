@@ -20,6 +20,9 @@ npm run dev                     # http://localhost:3000
 
 Sign in from `/login` by picking a seeded user — the demo has no external IdP (see "Authentication" below).
 
+`npm run db:seed` is additive: it creates missing demo records and leaves existing configuration edited through the
+UI alone. To throw away demo data and rebuild it from scratch, run `RESET_DEMO=1 npm run db:seed`.
+
 ## Layout
 
 ```

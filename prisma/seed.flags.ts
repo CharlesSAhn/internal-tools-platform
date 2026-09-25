@@ -117,26 +117,45 @@ const FLAGS: FlagSeed[] = [
   },
 ];
 
+function envRows(f: FlagSeed) {
+  return [
+    { env: "DEV" as const, ...f.dev, targetUserIds: f.dev.targetUserIds ?? [] },
+    { env: "STAGING" as const, ...f.staging, targetUserIds: f.staging.targetUserIds ?? [] },
+    { env: "PROD" as const, ...f.prod, targetUserIds: f.prod.targetUserIds ?? [] },
+  ];
+}
+
 export async function seedFlags() {
-  await prisma.flagEnvState.deleteMany({});
-  await prisma.featureFlag.deleteMany({});
+  const reset = process.env.RESET_DEMO === "1";
+  if (reset) {
+    await prisma.flagEnvState.deleteMany({});
+    await prisma.featureFlag.deleteMany({});
+  }
 
   for (const f of FLAGS) {
-    await prisma.featureFlag.create({
-      data: {
+    const flag = await prisma.featureFlag.upsert({
+      where: { key: f.key },
+      update: { description: f.description, ownerEmail: f.ownerEmail },
+      create: {
         key: f.key,
         description: f.description,
         ownerEmail: f.ownerEmail,
         archived: f.archived ?? false,
-        envStates: {
-          create: [
-            { env: "DEV", ...f.dev, targetUserIds: f.dev.targetUserIds ?? [] },
-            { env: "STAGING", ...f.staging, targetUserIds: f.staging.targetUserIds ?? [] },
-            { env: "PROD", ...f.prod, targetUserIds: f.prod.targetUserIds ?? [] },
-          ],
-        },
       },
     });
+
+    for (const row of envRows(f)) {
+      const existing = await prisma.flagEnvState.findUnique({
+        where: { flagId_env: { flagId: flag.id, env: row.env } },
+      });
+      if (!existing) {
+        await prisma.flagEnvState.create({ data: { flagId: flag.id, ...row } });
+      }
+    }
   }
-  console.log(`seeded ${FLAGS.length} feature flags with ${FLAGS.length * 3} environment states`);
+  console.log(
+    reset
+      ? `reset demo data: ${FLAGS.length} feature flags with ${FLAGS.length * 3} environment states`
+      : `seeded ${FLAGS.length} demo feature flags (existing flag configuration left untouched)`,
+  );
 }
