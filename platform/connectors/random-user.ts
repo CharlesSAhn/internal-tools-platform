@@ -10,12 +10,23 @@ type ApiUser = {
   nat?: string;
 };
 
+const NAME_MAX = 120;
+
+function text(value: unknown, max: number): string {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
+}
+
+/** Remote fields are untrusted: coerce to strings, bound the length, substitute a placeholder. */
 function mapUsers(results: ApiUser[]): ConnectorRecord[] {
-  return results.map((u, i) => ({
-    id: u.login?.uuid ?? `random-user-${i}`,
-    name: [u.name?.first, u.name?.last].filter(Boolean).join(" ") || `Applicant ${i + 1}`,
-    country: u.nat ?? "US",
-  }));
+  return results.map((u, i) => {
+    const name = [text(u.name?.first, NAME_MAX), text(u.name?.last, NAME_MAX)].filter(Boolean).join(" ");
+    const country = text(u.nat, NAME_MAX).toUpperCase();
+    return {
+      id: text(u.login?.uuid, 64) || `random-user-${i}`,
+      name: name.slice(0, NAME_MAX) || `Applicant ${i + 1}`,
+      country: /^[A-Z]{2}$/.test(country) ? country : "US",
+    };
+  });
 }
 
 export const fixtureApplicants: ConnectorRecord[] = fixtureRecords;

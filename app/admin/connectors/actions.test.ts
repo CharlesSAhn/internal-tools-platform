@@ -8,7 +8,7 @@ import { prisma } from "@platform/db";
 import { captureRedirect, formData } from "@/test/next-mocks";
 import { cleanupFixtures, makeUser, signIn, signOut } from "@/test/fixtures";
 import { pullIntoKycAction } from "./actions";
-import { CONNECTORS_PERMISSION, referenceFor, syntheticRisk } from "./import";
+import { CONNECTORS_PERMISSION, isUniqueViolation, referenceFor, syntheticRisk } from "./import";
 
 const realFetch = globalThis.fetch;
 const importedReferences: string[] = [];
@@ -131,6 +131,29 @@ describe("pullIntoKycAction", () => {
     expect(events.every((e) => e.action === "import:random-user" && e.actorId === user.id)).toBe(true);
   });
 
+  it("survives two pulls racing on the same records", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+
+    const uuid = `race-${Math.random().toString(36).slice(2, 10)}`;
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          results: [{ login: { uuid }, name: { first: "Race", last: "Applicant" }, nat: "GB" }],
+        }),
+      }) as Response) as unknown as typeof globalThis.fetch;
+
+    const created = await casesCreatedBy(async () => {
+      const [a, b] = await Promise.all([
+        captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" }))),
+        captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" }))),
+      ]);
+      expect([a, b].map((r) => r.params.get("imported")).sort()).toEqual(["0", "1"]);
+    });
+    expect(created).toHaveLength(1);
+  });
+
   it("refuses to pull from a disabled connector", async () => {
     globalThis.fetch = (async () => {
       throw new Error("a disabled connector must not reach the network");
@@ -164,5 +187,7 @@ describe("helpers", () => {
     );
     expect(syntheticRisk("abc")).toBe(syntheticRisk("abc"));
     expect(syntheticRisk("abc")).toBeLessThan(100);
+    expect(isUniqueViolation({ code: "P2002" })).toBe(true);
+    expect(isUniqueViolation(new Error("boom"))).toBe(false);
   });
 });

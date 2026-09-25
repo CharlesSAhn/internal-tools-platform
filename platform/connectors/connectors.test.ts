@@ -61,6 +61,27 @@ describe("live connector", () => {
     expect(records[0]).toEqual({ id: "uuid-0", name: "Live User0", country: "GB" });
   });
 
+  it("sanitises hostile or missing fields from the remote payload", async () => {
+    mockFetch(
+      async () =>
+        ({
+          ok: true,
+          json: async () => ({
+            results: [
+              { login: { uuid: 42 }, name: { first: "  Ada \n Mae ", last: "x".repeat(500) }, nat: "gb" },
+              { name: {}, nat: "NOT-A-COUNTRY" },
+            ],
+          }),
+        }) as Response,
+    );
+    const [first, second] = await listRandomUsers();
+    expect(first.id).toBe("random-user-0");
+    expect(first.name.length).toBeLessThanOrEqual(120);
+    expect(first.name.startsWith("Ada Mae")).toBe(true);
+    expect(first.country).toBe("GB");
+    expect(second).toEqual({ id: "random-user-1", name: "Applicant 2", country: "US" });
+  });
+
   it("maps every record to { id, name, country }", async () => {
     mockFetch(async () => apiResponse(3));
     for (const r of await randomUserConnector.listRecords()) {
