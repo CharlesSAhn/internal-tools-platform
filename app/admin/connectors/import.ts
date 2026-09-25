@@ -90,17 +90,18 @@ export async function ensureMappingRows(tx: Tx, source: string) {
     await tx.sourceMapping.createMany({ data: defaultMappingRows(source), skipDuplicates: true });
     return tx.sourceMapping.findMany({ where: { source }, orderBy: { targetField: "asc" } });
   }
-  let upgraded = false;
+  let legacy = false;
   for (const r of rows) {
     const next = upgradeLegacyValue(r.targetField, r.sourceField);
     if (!next) continue;
-    const { count } = await tx.sourceMapping.updateMany({
+    legacy = true;
+    await tx.sourceMapping.updateMany({
       where: { id: r.id, sourceField: r.sourceField },
       data: { sourceField: next },
     });
-    upgraded ||= count > 0;
   }
-  return upgraded ? tx.sourceMapping.findMany({ where: { source }, orderBy: { targetField: "asc" } }) : rows;
+  /** Whether the upgrade won or a concurrent save did, the snapshot read above is stale: re-read. */
+  return legacy ? tx.sourceMapping.findMany({ where: { source }, orderBy: { targetField: "asc" } }) : rows;
 }
 
 export async function loadMapping(connector: Pick<Connector, "id" | "fields">): Promise<Mapping> {

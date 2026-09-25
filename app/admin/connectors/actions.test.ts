@@ -11,13 +11,20 @@ import { cleanupFixtures, makeUser, signIn, signOut } from "@/test/fixtures";
 import { pullIntoKycAction } from "./actions";
 import { deleteMappingAction, resetMappingAction, saveMappingAction } from "./[id]/schema/actions";
 import {
+  applyMapping,
   CONNECTORS_PERMISSION,
+  ensureMappingRows,
   isUniqueViolation,
+  isValidTemplate,
   legacyReferenceFor,
   loadMapping,
   MISSING,
+  readPath,
   referenceFor,
+  renderTemplate,
+  resolveColumns,
   syntheticRisk,
+  templatePaths,
   UNMAPPED,
 } from "./import";
 
@@ -454,6 +461,28 @@ describe("pullIntoKycAction", () => {
     expect(redirected.error).toBe("Not wired in this prototype");
   });
 
+  it("rejects an unknown or missing connector id", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    for (const data of [formData({ connectorId: "nope" }), formData({})]) {
+      const redirected = await captureRedirect(() => pullIntoKycAction(data));
+      expect(redirected.path).toBe("/admin/connectors");
+      expect(redirected.error).toBe("Not wired in this prototype");
+    }
+  });
+
+  it("propagates non-unique database errors instead of retrying them", async () => {
+    mockApi(1);
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    const spy = vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(new Error("connection lost"));
+    try {
+      await expect(pullIntoKycAction(formData({ connectorId: "random-user" }))).rejects.toThrow("connection lost");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("still imports from the fixture when the connector call fails", async () => {
     globalThis.fetch = (async () => {
       throw Object.assign(new Error("aborted"), { name: "TimeoutError" });
@@ -475,5 +504,114 @@ describe("helpers", () => {
     expect(syntheticRisk("abc")).toBeLessThan(100);
     expect(isUniqueViolation({ code: "P2002" })).toBe(true);
     expect(isUniqueViolation(new Error("boom"))).toBe(false);
+  });
+
+  it("validates templates and resolves columns without a database", () => {
+    const fields = randomUserConnector.fields;
+    expect(isValidTemplate(undefined, fields)).toBe(false);
+    expect(isValidTemplate(42, fields)).toBe(false);
+    expect(isValidTemplate("{nat}".padEnd(121, "x"), fields)).toBe(false);
+    expect(isValidTemplate("{name.last}, {name.first} ({nat})", fields)).toBe(true);
+    expect(templatePaths("{name.last}, {nat} {bogus")).toEqual(["name.last", "nat"]);
+
+    const raw = { name: { first: "Ada" }, dob: { age: 36 }, location: { country: null } };
+    expect(readPath(raw, "name.first")).toBe("Ada");
+    expect(readPath(raw, "dob.age")).toBe("36");
+    expect(readPath(raw, "location.country")).toBe("");
+    expect(readPath(raw, "name.first.deeper")).toBe("");
+    expect(renderTemplate("  {name.first}   {name.last} ", raw)).toBe("Ada");
+
+    const record = { id: "x", raw: { nat: "gb" } };
+    expect(applyMapping({ applicantName: "{name.first}", applicantCountry: "{nat}" }, record)).toEqual({
+      applicantName: null,
+      applicantCountry: "GB",
+    });
+    expect(applyMapping({}, record)).toEqual({ applicantName: UNMAPPED, applicantCountry: UNMAPPED });
+    expect(resolveColumns({ applicantName: null, applicantCountry: null }, null)).toEqual({
+      applicantName: MISSING,
+      applicantCountry: MISSING,
+    });
+    expect(
+      resolveColumns({ applicantName: "New", applicantCountry: null }, { applicantName: "Old", applicantCountry: "FR" }),
+    ).toEqual({ applicantName: "New", applicantCountry: "FR" });
+  });
+});
+
+describe("schema actions: guards", () => {
+  it("rejects an unknown connector and an unknown target field on every action", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    for (const action of [saveMappingAction, deleteMappingAction, resetMappingAction]) {
+      const redirected = await captureRedirect(() => action(formData({ source: "nope", targetField: "applicantName", sourceField: "{nat}" })));
+      expect(redirected.path).toBe("/admin/connectors");
+      expect(redirected.error).toBe("Unknown connector");
+    }
+    const before = await prisma.sourceMapping.findMany({ where: { source: "random-user" } });
+    const redirected = await captureRedirect(() => deleteMappingAction(formData({ source: "random-user", targetField: "riskScore" })));
+    expect(redirected.path).toBe("/admin/connectors/random-user/schema");
+    expect(redirected.error).toBe("Unknown field");
+    expect(await prisma.sourceMapping.findMany({ where: { source: "random-user" } })).toEqual(before);
+  });
+
+  it("denies anonymous and non-admin users", async () => {
+    const data = () => formData({ source: "random-user", targetField: "applicantName", sourceField: "{email}" });
+    for (const action of [saveMappingAction, deleteMappingAction, resetMappingAction]) {
+      signOut();
+      expect((await captureRedirect(() => action(data()))).path).toBe("/login");
+      const user = await makeUser(["kyc.app.view"], "nonadmin");
+      await signIn(user.id);
+      expect((await captureRedirect(() => action(data()))).path).toBe("/forbidden");
+    }
+    const rows = await prisma.sourceMapping.findMany({ where: { source: "random-user", sourceField: "{email}" } });
+    expect(rows).toHaveLength(0);
+  });
+
+  it("upgrades the legacy `name` mapping and does not clobber a concurrent save", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+    try {
+      await prisma.sourceMapping.deleteMany({ where: { source: "random-user" } });
+      await prisma.sourceMapping.createMany({
+        data: [
+          { source: "random-user", targetField: "applicantName", sourceField: "name" },
+          { source: "random-user", targetField: "applicantCountry", sourceField: "{location.country}" },
+        ],
+      });
+      /** A `tx` whose first read is followed by an admin save, before the upgrade write runs. */
+      let reads = 0;
+      const racingTx = {
+        sourceMapping: {
+          ...prisma.sourceMapping,
+          updateMany: (args: Parameters<typeof prisma.sourceMapping.updateMany>[0]) => prisma.sourceMapping.updateMany(args),
+          createMany: (args: Parameters<typeof prisma.sourceMapping.createMany>[0]) => prisma.sourceMapping.createMany(args),
+          findMany: async (args: Parameters<typeof prisma.sourceMapping.findMany>[0]) => {
+            const rows = await prisma.sourceMapping.findMany(args);
+            if (reads++ === 0) {
+              await prisma.sourceMapping.updateMany({
+                where: { source: "random-user", targetField: "applicantName" },
+                data: { sourceField: "{email}" },
+              });
+            }
+            return rows;
+          },
+        },
+      } as unknown as typeof prisma;
+      const rows = await ensureMappingRows(racingTx, "random-user");
+      expect(rows.map((r) => [r.targetField, r.sourceField])).toEqual([
+        ["applicantCountry", "{location.country}"],
+        ["applicantName", "{email}"],
+      ]);
+      expect(await loadMapping(randomUserConnector)).toEqual({
+        applicantName: "{email}",
+        applicantCountry: "{location.country}",
+      });
+      await prisma.sourceMapping.updateMany({
+        where: { source: "random-user", targetField: "applicantName" },
+        data: { sourceField: "name" },
+      });
+      expect((await loadMapping(randomUserConnector)).applicantName).toBe("{name.first} {name.last}");
+    } finally {
+      await captureRedirect(() => resetMappingAction(formData({ source: "random-user" })));
+    }
   });
 });
