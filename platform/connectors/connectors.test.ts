@@ -58,34 +58,50 @@ describe("live connector", () => {
     expect(connector?.status).toBe("live");
     const records = await connector!.listRecords();
     expect(records).toHaveLength(8);
-    expect(records[0]).toEqual({ id: "uuid-0", name: "Live User0", country: "GB" });
+    expect(records[0]).toEqual({
+      id: "uuid-0",
+      raw: { login: { uuid: "uuid-0" }, name: { first: "Live", last: "User0" }, nat: "GB" },
+    });
   });
 
-  it("sanitises hostile or missing fields from the remote payload", async () => {
+  it("keeps only the documented subset of the raw payload, bounded and primitive", async () => {
     mockFetch(
       async () =>
         ({
           ok: true,
           json: async () => ({
             results: [
-              { login: { uuid: 42 }, name: { first: "  Ada \n Mae ", last: "x".repeat(500) }, nat: "gb" },
-              { name: {}, nat: "NOT-A-COUNTRY" },
+              {
+                login: { uuid: 42, password: "hunter2" },
+                name: { first: "x".repeat(500), last: { nested: true } },
+                picture: { large: "http://…" },
+                location: { postcode: 8000, coordinates: { lat: "1" } },
+                nat: "gb",
+              },
+              { name: {} },
             ],
           }),
         }) as Response,
     );
     const [first, second] = await listRandomUsers();
     expect(first.id).toBe("random-user-0");
-    expect(first.name.length).toBeLessThanOrEqual(120);
-    expect(first.name.startsWith("Ada Mae")).toBe(true);
-    expect(first.country).toBe("GB");
-    expect(second).toEqual({ id: "random-user-1", name: "Applicant 2", country: "US" });
+    expect(first.raw).toEqual({
+      login: { uuid: 42 },
+      name: { first: "x".repeat(200) },
+      location: { postcode: 8000 },
+      nat: "gb",
+    });
+    expect(second).toEqual({ id: "random-user-1", raw: {} });
   });
 
-  it("maps every record to { id, name, country }", async () => {
+  it("exposes the documented field paths and every raw key is one of them", async () => {
     mockFetch(async () => apiResponse(3));
+    const paths = (obj: Record<string, unknown>, prefix = ""): string[] =>
+      Object.entries(obj).flatMap(([k, v]) =>
+        v && typeof v === "object" ? paths(v as Record<string, unknown>, `${prefix}${k}.`) : [`${prefix}${k}`],
+      );
     for (const r of await randomUserConnector.listRecords()) {
-      expect(Object.keys(r).sort()).toEqual(["country", "id", "name"]);
+      for (const p of paths(r.raw)) expect(randomUserConnector.fields).toContain(p);
     }
   });
 });

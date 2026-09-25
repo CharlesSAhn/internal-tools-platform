@@ -52,8 +52,8 @@ export async function seedKyc() {
   if ((await prisma.sourceMapping.count({ where: { source: "random-user" } })) === 0) {
     await prisma.sourceMapping.createMany({
       data: [
-        { source: "random-user", targetField: "applicantName", sourceField: "name" },
-        { source: "random-user", targetField: "applicantCountry", sourceField: "country" },
+        { source: "random-user", targetField: "applicantName", sourceField: "{name.first} {name.last}" },
+        { source: "random-user", targetField: "applicantCountry", sourceField: "{nat}" },
       ],
     });
   }

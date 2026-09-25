@@ -28,7 +28,7 @@ export async function pullIntoKycAction(formData: FormData) {
     redirect(`/admin/connectors?error=${encodeURIComponent("Not wired in this prototype")}`);
   }
 
-  const [records, mapping] = await Promise.all([connector.listRecords(), loadMapping(connector.id)]);
+  const [records, mapping] = await Promise.all([connector.listRecords(), loadMapping(connector)]);
   const importAction = `import:${connector.id}`;
 
   /**

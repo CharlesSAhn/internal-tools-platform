@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { RANDOM_USER_URL, fixtureApplicants, listRandomUsers } from "./index";
+import { readPath } from "@/app/admin/connectors/import";
+import { RANDOM_USER_FIELDS, RANDOM_USER_URL, fixtureApplicants, listRandomUsers } from "./index";
 
 /**
  * The only test in the suite that touches a third party. It is skipped when the
@@ -25,10 +26,9 @@ describe("random-user integration", () => {
     /** The fixture is the seeded live response, so falling back imports the same eight cases. */
     expect(records).toEqual(fixtureApplicants);
     for (const record of records) {
-      expect(Object.keys(record).sort()).toEqual(["country", "id", "name"]);
-      expect(record.id).toBeTruthy();
-      expect(record.name.trim().length).toBeGreaterThan(0);
-      expect(["US", "GB", "DE", "FR", "IN"]).toContain(record.country);
+      expect(record.id).toBe(readPath(record.raw, "login.uuid"));
+      for (const path of RANDOM_USER_FIELDS) expect(readPath(record.raw, path)).not.toBe("");
+      expect(["US", "GB", "DE", "FR", "IN"]).toContain(readPath(record.raw, "nat"));
     }
     expect(new Set(records.map((r) => r.id)).size).toBe(records.length);
   });

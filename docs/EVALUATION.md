@@ -34,7 +34,13 @@ Worth being precise about, because these are the things we would be giving up or
 
 `/admin/connectors` makes that first bullet concrete rather than rhetorical. The catalog has nine tiles and exactly
 one of them is real: Random User (`https://randomuser.me`), a plain HTTP GET with a 2s timeout that falls back to a
-checked-in fixture, mapped to `{ id, name, country }` and importable as NEW KYC cases (keyed on `source` + `sourceId`, given a standard `KYC-nnnnnn` reference, with an admin-editable field mapping at `/admin/connectors/random-user/schema`). The other eight — SharePoint,
+checked-in fixture, and importable as NEW KYC cases (keyed on `source` + `sourceId` = `login.uuid`, given a standard
+`KYC-nnnnnn` reference). The connector does not flatten the payload: it keeps a documented 16-path subset of the raw
+record (`name.first`, `location.country`, `dob.date`, `id.value`, …) and the admin decides at
+`/admin/connectors/random-user/schema` which of those fill each `KycCase` column, via `{path}` templates such as
+`{name.first} {name.last}` → `applicantName`. That is the real Power Apps-style mapping problem — nested source, flat
+target, per-column choices, a preview against a sample record — and even this one-source version needed a validator,
+a legacy-value upgrade, an "explicitly unmapped" state and an audit trail. The other eight — SharePoint,
 Dataverse, SQL Server, Outlook, Teams, Salesforce, Dynamics 365, ServiceNow — are placeholders whose `listRecords()`
 throws; there is no OAuth, no credential storage, no paging, no throttling and no write path behind any of them. One
 unauthenticated read-only JSON endpoint took a single small module. Each of those eight, done properly, is an auth

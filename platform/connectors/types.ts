@@ -1,8 +1,11 @@
-/** The only record shape a connector returns in this prototype. */
+/**
+ * A connector hands back the source system's record as-is (or a documented subset of it) plus a
+ * stable identity. Deciding which raw fields land in which KycCase column is the admin's job, via
+ * the per-connector schema mapping — the adapter does not flatten on the source's behalf.
+ */
 export type ConnectorRecord = {
   id: string;
-  name: string;
-  country: string;
+  raw: Record<string, unknown>;
 };
 
 export type ConnectorStatus = "live" | "disabled";
@@ -14,6 +17,8 @@ export type Connector = {
   status: ConnectorStatus;
   /** Two-letter badge shown instead of a vendor logo. */
   initials: string;
+  /** Dot-paths into `raw` that the schema editor offers as mapping sources. */
+  fields: readonly string[];
   listRecords(): Promise<ConnectorRecord[]>;
 };
 
@@ -41,6 +46,7 @@ export function disabledConnector(id: string, name: string, description: string)
     description,
     status: "disabled",
     initials: initialsOf(name),
+    fields: [],
     listRecords() {
       return Promise.reject(new ConnectorDisabledError(id));
     },
