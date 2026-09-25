@@ -73,6 +73,21 @@ export function canChangeEnv(
   }
 }
 
+export const STALE_STATE_MESSAGE = "Flag changed under you. Reload.";
+
+/**
+ * Optimistic concurrency: the form carries the `updatedAt` it was rendered
+ * from, so a save that lost a race (a kill switch, another editor) is
+ * rejected instead of silently reinstating a stale configuration.
+ */
+export function assertFresh(expectedUpdatedAt: unknown, actualUpdatedAt: Date): void {
+  const expected = String(expectedUpdatedAt ?? "");
+  const expectedMs = expected ? new Date(expected).getTime() : NaN;
+  if (Number.isNaN(expectedMs) || expectedMs !== actualUpdatedAt.getTime()) {
+    throw new TransitionError(STALE_STATE_MESSAGE);
+  }
+}
+
 export function normalizeRollout(value: unknown): number {
   const n = Math.trunc(Number(value));
   if (!Number.isFinite(n)) throw new TransitionError("Rollout percentage must be a number");

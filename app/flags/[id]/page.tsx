@@ -68,6 +68,7 @@ export default async function FlagDetailPage({
             </p>
             <form action={killSwitchAction}>
               <input type="hidden" name="flagId" value={flag.id} />
+              <input type="hidden" name="expectedUpdatedAt" value={prod.updatedAt.toISOString()} />
               <Button type="submit" variant="danger" disabled={!canKill || !prod.enabled}>
                 Kill in production
               </Button>
@@ -106,7 +107,7 @@ export default async function FlagDetailPage({
               <form action={updateEnvStateAction} className="space-y-3">
                 <input type="hidden" name="flagId" value={flag.id} />
                 <input type="hidden" name="env" value={env} />
-                <input type="hidden" name="renderedAt" value={state.updatedAt.toISOString()} />
+                <input type="hidden" name="expectedUpdatedAt" value={state.updatedAt.toISOString()} />
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input type="checkbox" name="enabled" defaultChecked={state.enabled} disabled={!editable} />
                   Enabled

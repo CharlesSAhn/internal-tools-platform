@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { SessionUser } from "@platform/auth/session";
-import { TransitionError, assertCanChangeEnv, canChangeEnv, normalizeRollout, parseTargetUserIds } from "./policy";
+import {
+  TransitionError,
+  assertCanChangeEnv,
+  assertFresh,
+  canChangeEnv,
+  normalizeRollout,
+  parseTargetUserIds,
+} from "./policy";
 
 function user(permissions: string[]): SessionUser {
   return { id: "u1", email: "u@example.com", name: "U", roles: [], permissions };
@@ -9,6 +16,17 @@ function user(permissions: string[]): SessionUser {
 const editor = user(["flags.app.view", "flags.flag.create", "flags.write.nonprod"]);
 const flagAdmin = user([...editor.permissions, "flags.write.prod"]);
 const viewer = user(["flags.app.view"]);
+
+describe("optimistic concurrency", () => {
+  it("rejects a save prepared before a kill switch moved the row", () => {
+    const renderedAt = new Date("2026-01-01T10:00:00.000Z");
+    const afterKillSwitch = new Date("2026-01-01T10:00:05.000Z");
+
+    expect(() => assertFresh(renderedAt.toISOString(), afterKillSwitch)).toThrow(TransitionError);
+    expect(() => assertFresh(renderedAt.toISOString(), afterKillSwitch)).toThrow("Flag changed under you. Reload.");
+    expect(() => assertFresh(renderedAt.toISOString(), renderedAt)).not.toThrow();
+  });
+});
 
 describe("environment-graded authorization", () => {
   it("lets a nonprod editor change staging", () => {
