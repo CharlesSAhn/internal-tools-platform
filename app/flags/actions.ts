@@ -17,6 +17,8 @@ import {
   type FlagEnvName,
 } from "./policy";
 
+const STALE_MESSAGE = "This flag changed while you were editing it — reload and try again";
+
 function backTo(flagId: string, error?: string) {
   redirect(error ? `/flags/${flagId}?error=${encodeURIComponent(error)}` : `/flags/${flagId}?saved=1`);
 }
@@ -31,6 +33,8 @@ async function applyEnvChange(args: {
   env: FlagEnvName;
   next: { enabled: boolean; rolloutPercentage: number; targetUserIds: string[] };
   reason: string | null;
+  /** `updatedAt` of the state the form was rendered from, when the caller submitted a form. */
+  renderedAt?: Date | null;
   /** Named from the state read inside the transaction, not from the rendered form. */
   action: (currentEnabled: boolean) => string;
 }) {
@@ -41,6 +45,8 @@ async function applyEnvChange(args: {
       where: { flagId: args.flagId, env: args.env as FlagEnv },
     });
     if (!state) throw new TransitionError("Unknown environment state");
+    if (args.renderedAt && args.renderedAt.getTime() !== state.updatedAt.getTime())
+      throw new TransitionError(STALE_MESSAGE);
 
     assertCanChangeEnv(user, {
       env: args.env,
@@ -59,8 +65,7 @@ async function applyEnvChange(args: {
       where: { id: state.id, updatedAt: state.updatedAt },
       data: args.next,
     });
-    if (updated.count === 0)
-      throw new TransitionError("This flag changed while you were editing it — reload and try again");
+    if (updated.count === 0) throw new TransitionError(STALE_MESSAGE);
 
     await writeAudit(tx, user, {
       app: "flags",
@@ -80,6 +85,7 @@ export async function updateEnvStateAction(formData: FormData) {
   try {
     const reason = String(formData.get("reason") ?? "").trim() || null;
     const enabled = formData.get("enabled") === "on";
+    const rendered = String(formData.get("renderedAt") ?? "");
     const next = {
       enabled,
       rolloutPercentage: normalizeRollout(formData.get("rolloutPercentage")),
@@ -90,6 +96,7 @@ export async function updateEnvStateAction(formData: FormData) {
       env,
       next,
       reason,
+      renderedAt: rendered ? new Date(rendered) : null,
       action: (currentEnabled) => transitionAction(env, currentEnabled, enabled),
     });
   } catch (e) {
