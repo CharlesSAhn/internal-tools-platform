@@ -128,6 +128,7 @@ function envRows(f: FlagSeed) {
 export async function seedFlags() {
   const reset = process.env.RESET_DEMO === "1";
   if (reset) {
+    await prisma.auditEvent.deleteMany({ where: { app: "flags" } });
     await prisma.flagEnvState.deleteMany({});
     await prisma.featureFlag.deleteMany({});
   }

@@ -28,14 +28,24 @@ function suffix(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/**
+ * `upsert` is not atomic in Postgres, so test files running in parallel can both
+ * insert the same permission key; the loser falls back to the existing row.
+ */
+async function ensurePermission(key: string) {
+  const existing = await prisma.permission.findUnique({ where: { key } });
+  if (existing) return existing;
+  try {
+    return await prisma.permission.create({ data: { key, app: key.split(".")[0] } });
+  } catch {
+    return prisma.permission.findUniqueOrThrow({ where: { key } });
+  }
+}
+
 /** A user whose role grants exactly `permissions` — nothing is inherited from the seed. */
 export async function makeUser(permissions: string[], label = "user") {
   const s = suffix();
-  const perms = await Promise.all(
-    permissions.map((key) =>
-      prisma.permission.upsert({ where: { key }, update: {}, create: { key, app: key.split(".")[0] } }),
-    ),
-  );
+  const perms = await Promise.all(permissions.map(ensurePermission));
   const role = await prisma.role.create({
     data: {
       key: `test_${label}_${s}`,
