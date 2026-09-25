@@ -1,0 +1,40 @@
+// KYC application schema. Owned by the KYC app session.
+
+enum KycStatus {
+  NEW
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+model KycCase {
+  id               String     @id @default(cuid())
+  reference        String     @unique
+  applicantName    String
+  applicantCountry String
+  riskScore        Int
+  status           KycStatus  @default(NEW)
+  assigneeId       String?
+  // Set when a case is escalated so the four-eyes guard can stop the escalator
+  // from claiming it back.
+  lastEscalatedById String?
+  submittedAt      DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  documents        KycDocument[]
+
+  @@index([status])
+  @@index([assigneeId])
+  @@index([riskScore])
+}
+
+model KycDocument {
+  id       String  @id @default(cuid())
+  caseId   String
+  type     String
+  filename String
+  verified Boolean @default(false)
+  case     KycCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+}
