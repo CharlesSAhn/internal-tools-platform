@@ -1,0 +1,33 @@
+// Feature-flag app schema. Owned by the feature-flags app session.
+
+enum FlagEnv {
+  DEV
+  STAGING
+  PROD
+}
+
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String
+  ownerEmail  String
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  envStates   FlagEnvState[]
+
+  @@index([archived])
+}
+
+model FlagEnvState {
+  id                String   @id @default(cuid())
+  flagId            String
+  flag              FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  env               FlagEnv
+  enabled           Boolean  @default(false)
+  rolloutPercentage Int      @default(0)
+  targetUserIds     String[] @default([])
+  updatedAt         DateTime @updatedAt
+
+  @@unique([flagId, env])
+}
