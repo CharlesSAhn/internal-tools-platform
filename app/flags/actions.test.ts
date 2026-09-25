@@ -5,7 +5,7 @@ vi.mock("next/navigation", async () => (await import("@/test/next-mocks")).navig
 vi.mock("next/cache", async () => (await import("@/test/next-mocks")).cacheModule);
 
 import { prisma } from "@platform/db";
-import { captureRedirect, formData } from "@/test/next-mocks";
+import { captureRedirect, formData, revalidated } from "@/test/next-mocks";
 import {
   auditFor,
   cleanupFixtures,
@@ -38,6 +38,7 @@ async function flagAdmin() {
 
 beforeEach(() => {
   signOut();
+  revalidated.length = 0;
 });
 
 afterAll(async () => {
@@ -74,6 +75,27 @@ describe("updateEnvStateAction", () => {
     expect(audit[0]).toMatchObject({ app: "flags", entityType: "FeatureFlag", action: "STAGING:enable" });
     expect(audit[0].before).toMatchObject({ env: "STAGING", enabled: false });
     expect(audit[0].after).toMatchObject({ env: "STAGING", enabled: true, rolloutPercentage: 25 });
+  });
+
+  it("invalidates the list, the detail page and the audit log", async () => {
+    await signIn((await editor()).id);
+    const flag = await makeFlag();
+    const before = await envState(flag.id, "DEV");
+
+    await captureRedirect(() =>
+      updateEnvStateAction(
+        formData({
+          flagId: flag.id,
+          env: "DEV",
+          enabled: "on",
+          rolloutPercentage: "25",
+          targetUserIds: "",
+          expectedUpdatedAt: before.updatedAt.toISOString(),
+        }),
+      ),
+    );
+
+    expect(revalidated).toEqual(["/flags", `/flags/${flag.id}`, "/admin/audit"]);
   });
 
   it("records a same-state edit as an update, not an enable", async () => {
@@ -323,6 +345,18 @@ describe("killSwitchAction", () => {
     });
   });
 
+  it("invalidates the list so its summary drops the killed rollout", async () => {
+    await signIn((await flagAdmin()).id);
+    const flag = await makeFlag({ prod: { enabled: true, rolloutPercentage: 80 } });
+    const before = await envState(flag.id, "PROD");
+
+    await captureRedirect(() =>
+      killSwitchAction(formData({ flagId: flag.id, expectedUpdatedAt: before.updatedAt.toISOString() })),
+    );
+
+    expect(revalidated).toContain("/flags");
+  });
+
   it("refuses a non-prod editor", async () => {
     await signIn((await editor()).id);
     const flag = await makeFlag({ prod: { enabled: true, rolloutPercentage: 80 } });
@@ -403,6 +437,15 @@ describe("setArchivedAction", () => {
     expect(audit[1].reason).toBeNull();
   });
 
+  it("invalidates the list so an archived flag leaves the default view", async () => {
+    await signIn((await editor()).id);
+    const flag = await makeFlag();
+
+    await captureRedirect(() => setArchivedAction(formData({ flagId: flag.id, archived: "true" })));
+
+    expect(revalidated).toContain("/flags");
+  });
+
   it("rejects an unknown flag id without auditing", async () => {
     await signIn((await editor()).id);
     const redirected = await captureRedirect(() =>
@@ -444,6 +487,7 @@ describe("createFlagAction", () => {
     expect(created.envStates).toHaveLength(3);
     expect(created.envStates.every((s) => !s.enabled && s.rolloutPercentage === 0)).toBe(true);
     expect((await auditFor(created.id))[0]).toMatchObject({ action: "create", before: null });
+    expect(revalidated).toContain("/flags");
   });
 
   it.each([
