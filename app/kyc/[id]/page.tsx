@@ -74,6 +74,13 @@ export default async function KycCasePage({
                 <dd className="text-slate-900">{kycCase.applicantCountry}</dd>
               </div>
               <div>
+                <dt className="text-xs uppercase text-slate-500">Source</dt>
+                <dd className="text-slate-900">
+                  {kycCase.source}
+                  {kycCase.sourceId ? <span className="ml-1 font-mono text-xs text-slate-400">{kycCase.sourceId}</span> : null}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-xs uppercase text-slate-500">Risk score</dt>
                 <dd>
                   <Badge tone={RISK_TONE[riskBand(kycCase.riskScore)]}>
