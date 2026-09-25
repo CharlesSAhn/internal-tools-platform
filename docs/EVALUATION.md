@@ -32,6 +32,16 @@ Worth being precise about, because these are the things we would be giving up or
 - **Vendor compliance posture.** Microsoft's attestations, SLA and support contract. In-house, we become the SLA.
 - **Mobile shells and offline behaviour**, which we do not attempt at all.
 
+`/admin/connectors` makes that first bullet concrete rather than rhetorical. The catalog has nine tiles and exactly
+one of them is real: Random User (`https://randomuser.me`), a plain HTTP GET with a 2s timeout that falls back to a
+checked-in fixture, mapped to `{ id, name, country }` and importable as NEW KYC cases. The other eight — SharePoint,
+Dataverse, SQL Server, Outlook, Teams, Salesforce, Dynamics 365, ServiceNow — are placeholders whose `listRecords()`
+throws; there is no OAuth, no credential storage, no paging, no throttling and no write path behind any of them. One
+unauthenticated read-only JSON endpoint took a single small module. Each of those eight, done properly, is an auth
+flow, a token store with rotation, schema mapping, rate-limit handling, and an on-call owner. That distance — one
+tile versus a catalog of several hundred maintained by the vendor — is the Power Apps gap, and it is the strongest
+argument for keeping Power Apps (or a hybrid) wherever an internal tool's value is mostly in reaching M365 data.
+
 What we would give up and should not miss: the formula language, the canvas layout model, Power Automate flows (we
 have CI, cron and code), and premium connectors these three tools are unlikely to use.
 
@@ -49,7 +59,8 @@ have CI, cron and code), and premium connectors these three tools are unlikely t
 | A structurally different second app — environment-scoped config with production guardrails | Built | `app/flags` |
 | Machine-facing API — token-authenticated flag reads per environment | Built | `app/api/flags` |
 | Optimistic concurrency on both apps' writes | Built | `app/kyc/actions.ts`, `app/flags/actions.ts` |
-| Tests — 110 across 9 files, including server actions and the API route against a real Postgres | Built | `*.test.ts`, `test/fixtures.ts` |
+| Connector catalog — one live HTTP connector with fixture fallback, eight placeholders | Built | `platform/connectors`, `/admin/connectors` |
+| Tests — 141 across 12 files, including server actions and the API route against a real Postgres | Built | `*.test.ts`, `test/fixtures.ts` |
 | CI — Postgres service, typecheck, tests, production build on every PR | Built | `.github/workflows/ci.yml` |
 
 The second app is the evidence that matters. KYC and feature flags were built by two independent sessions in parallel
