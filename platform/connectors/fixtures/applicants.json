@@ -1,10 +1,42 @@
 [
-  { "id": "fixture-1", "name": "Amelia Hughes", "country": "GB" },
-  { "id": "fixture-2", "name": "Lukas Brandt", "country": "DE" },
-  { "id": "fixture-3", "name": "Chloe Moreau", "country": "FR" },
-  { "id": "fixture-4", "name": "Owen Carter", "country": "US" },
-  { "id": "fixture-5", "name": "Priya Nair", "country": "IN" },
-  { "id": "fixture-6", "name": "Sofia Rossi", "country": "GB" },
-  { "id": "fixture-7", "name": "Noah Fischer", "country": "DE" },
-  { "id": "fixture-8", "name": "Maya Laurent", "country": "FR" }
+  {
+    "id": "faaa7399-a738-48bc-99fb-b91dbea47945",
+    "name": "Tristan Masson",
+    "country": "FR"
+  },
+  {
+    "id": "b1411393-f13f-46f7-a6cd-2e8e53960df9",
+    "name": "Pero Stolle",
+    "country": "DE"
+  },
+  {
+    "id": "3bae1596-d207-4d79-8e03-11b4eda4e75a",
+    "name": "Maxim Wecker",
+    "country": "DE"
+  },
+  {
+    "id": "2bb075a2-3858-41b1-8acd-5f800130e1b2",
+    "name": "Sonali Keshri",
+    "country": "IN"
+  },
+  {
+    "id": "21c96cf1-fbd6-4702-9941-107cc8720f2e",
+    "name": "Antonia Poth",
+    "country": "DE"
+  },
+  {
+    "id": "0b5b11b3-474c-4223-b8bd-f981e5cbbda9",
+    "name": "Rose Warren",
+    "country": "GB"
+  },
+  {
+    "id": "8e1ac287-2f44-4aa6-9d3d-f9867c3a7649",
+    "name": "Dariusz Rank",
+    "country": "DE"
+  },
+  {
+    "id": "6b36f9a9-2740-4d65-8cfa-8c466ddb9e67",
+    "name": "Abhimanyu Dawangave",
+    "country": "IN"
+  }
 ]

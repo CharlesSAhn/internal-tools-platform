@@ -154,6 +154,35 @@ describe("pullIntoKycAction", () => {
     expect(events).toHaveLength(2);
   });
 
+  it("leaves a reviewed case untouched when the source record changes", async () => {
+    const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
+    await signIn(user.id);
+
+    const uuid = `reviewed-${Math.random().toString(36).slice(2, 10)}`;
+    const respondWith = (last: string) => {
+      globalThis.fetch = (async () =>
+        ({
+          ok: true,
+          json: async () => ({ results: [{ login: { uuid }, name: { first: "Reviewed", last }, nat: "US" }] }),
+        }) as Response) as unknown as typeof globalThis.fetch;
+    };
+
+    respondWith("Before");
+    const created = await casesCreatedBy(() =>
+      captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" }))),
+    );
+    await prisma.kycCase.update({ where: { id: created[0].id }, data: { status: "APPROVED" } });
+
+    respondWith("After");
+    const redirected = await captureRedirect(() => pullIntoKycAction(formData({ connectorId: "random-user" })));
+    expect(redirected.params.get("imported")).toBe("0");
+    expect(redirected.params.get("updated")).toBe("0");
+
+    const after = await prisma.kycCase.findUniqueOrThrow({ where: { id: created[0].id } });
+    expect(after.applicantName).toBe("Reviewed Before");
+    expect(after.status).toBe("APPROVED");
+  });
+
   it("writes an audit row for every imported case", async () => {
     mockApi(2);
     const user = await makeUser([CONNECTORS_PERMISSION], "connectoradmin");
