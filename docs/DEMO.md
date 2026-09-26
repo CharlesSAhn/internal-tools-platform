@@ -72,4 +72,4 @@ reproduced here."
 M365-centric or business-authored apps; pilot this platform on engineer-owned, workflow-heavy tools — flags and refunds
 first, KYC after SSO, migrations and audit hardening. Measure per-app effort and platform ownership through app #5,
 then decide how much of the Power Apps footprint should shrink. Not production-ready: demo auth, `db push`, nothing
-deployed. Details in `docs/EVALUATION.md`."
+deployed."

@@ -25,8 +25,6 @@ deployed, audit append-only by convention only, one read-only HTTP connector, no
 
 | Document | Read it for |
 |---|---|
-| `docs/KEY_DECISIONS.md` | one page: what was decided, why, evidence, cost — ~1 minute read |
-| `docs/EVALUATION.md` | Power Apps comparison, cost discussion, recommendation, production gaps |
 | `docs/ARCHITECTURE.md` | request path, authorization/audit/workflow models, how to add an app |
 | `docs/DEMO.md` | 5-minute walkthrough script |
 | `PLAN.md` | the pre-implementation proposal, kept as written |
@@ -95,4 +93,4 @@ test/                Postgres fixtures and Next.js mocks
   `platform/registry/index.ts`, then pages and actions using the helpers above. Done once (flags next to KYC); an
   estimate for app #3 onward.
 
-Details: `docs/ARCHITECTURE.md`. Comparison, cost and recommendation: `docs/EVALUATION.md`.
+Details: `docs/ARCHITECTURE.md`.
