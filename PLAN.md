@@ -1,6 +1,6 @@
 # Internal Tools Platform — Architecture & Execution Plan (pre-implementation)
 
-Status: proposal for review. No application code written yet.
+Status: internal proposal, written before implementation. No application code written yet.
 Constraints assumed: ~2 hours of Devin execution time, ≤ $200 spend, prototype quality (credible, not production).
 
 ---
@@ -208,7 +208,7 @@ Deliberately asymmetric — test the things that would be embarrassing to get wr
 | Platform PR slips, blocking both app sessions | High | T1–T5 are deliberately small and conventional; if T5 (UI kit) is late, app sessions can start with plain tables and swap in DataTable later. |
 | Prisma migration collision between concurrent app sessions | Medium | Multi-file schema + one migration per app + regenerate-on-conflict rule (§6.4). |
 | Over-engineering the platform into an app engine | High (project-killing) | Explicit anti-goal (§0). Rule of thumb: nothing goes into `packages/` until the second app needs it — the two apps are the forcing function. |
-| Demo looks like CRUD, doesn't answer the VP's question | High | `docs/EVALUATION.md` is a first-class deliverable (T10), not a README afterthought. The artifact being evaluated is the *argument*, supported by code. |
+| Demo looks like CRUD, doesn't answer the VP's question | High | `docs/EVALUATION.md` is a first-class deliverable (T10), not a README afterthought. What the decision rests on is the *argument*, supported by code. |
 | Real SSO not demonstrated | Medium | Dev credentials provider + documented Auth.js OIDC config; state plainly that SSO integration is ~half a day, not a risk. |
 | Ongoing ownership cost understated | Medium | Put a named cost model in the writeup (0.3–0.7 FTE + hosting) rather than claiming $250K savings. |
 
@@ -222,5 +222,5 @@ Refunds dashboard · no-code/visual builder · citizen-developer authoring · mu
 
 1. **Is the real user an engineer or a non-engineer?** If Ops/Compliance must author apps themselves, this architecture is wrong and we should evaluate Retool/Appsmith instead. (My read: engineers.)
 2. **Budget shape:** approve ~2h serialized / ~$150 with the cut list in §10, or tighten scope now (e.g. drop the flags read API and Playwright) to buy margin.
-3. **Auth:** dev credentials provider for the demo — acceptable? Wiring real Okta/Entra would consume ~20% of the budget for little evaluative signal.
+3. **Auth:** dev credentials provider for the demo — acceptable? Wiring real Okta/Entra would consume ~20% of the budget and tell us little we don't already know.
 4. **First push to `main`** on the empty repo — confirm.

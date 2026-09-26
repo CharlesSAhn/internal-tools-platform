@@ -1,6 +1,7 @@
 # Should we replace Power Apps with an in-house internal-tools platform?
 
-An assessment written from the prototype in this repository. The platform and two apps were planned for ~2 hours of
+An engineering evaluation written from the prototype in this repository, to inform our build-vs-buy decision on
+Power Apps. The platform and two apps were planned for ~2 hours of
 agent time (`PLAN.md`); the actual work ran across several Devin sessions including review fixes and follow-up
 features, and total effort was not measured precisely — treat any time figure here as an estimate. Everything
 claimed as "built" below is in the tree on `main`; everything else is explicitly marked as not built. `PLAN.md` has

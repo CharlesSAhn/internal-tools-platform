@@ -1,7 +1,7 @@
 # Internal Tools Platform — prototype
 
-**What this is.** A take-home prototype answering one question for a ~60-engineer fintech that spends ~$250K/yr on
-Microsoft Power Apps: can a small, reusable, engineer-owned platform — built and maintained with Devin — be a credible
+**What this is.** An exploratory engineering prototype answering one question for our ~60-engineer fintech, which spends
+~$250K/yr on Microsoft Power Apps: can a small, reusable, engineer-owned platform — built and maintained with Devin — be a credible
 alternative or complement for internal tools?
 
 **What was built.** A shared platform (`platform/*`: demo session auth, RBAC, transactional audit log, declarative
@@ -25,7 +25,7 @@ deployed, audit append-only by convention only, one read-only HTTP connector, no
 
 | Document | Read it for |
 |---|---|
-| `docs/KEY_DECISIONS.md` | one page: what was decided, why, evidence, cost — ~1 minute |
+| `docs/KEY_DECISIONS.md` | one page: what was decided, why, evidence, cost — ~1 minute read |
 | `docs/EVALUATION.md` | Power Apps comparison, cost discussion, recommendation, production gaps |
 | `docs/ARCHITECTURE.md` | request path, authorization/audit/workflow models, how to add an app |
 | `docs/DEMO.md` | 5-minute walkthrough script |

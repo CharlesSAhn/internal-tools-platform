@@ -1,4 +1,4 @@
-# Demo script (5 minutes, Loom)
+# Demo script (5-minute recorded walkthrough)
 
 Setup beforehand (not on camera): `cp .env.example .env && npm install && npx prisma db push && npm run db:seed &&
 npm run dev`, then open `http://localhost:3000` in two browser profiles so switching users is instant. Sign in at
