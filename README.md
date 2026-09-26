@@ -1,98 +1,98 @@
-# Internal Tools Platform (prototype)
+# Internal Tools Platform — prototype
 
-A small reusable platform for building internal applications, plus two applications built on it:
+**What this is.** A take-home prototype answering one question for a ~60-engineer fintech that spends ~$250K/yr on
+Microsoft Power Apps: can a small, reusable, engineer-owned platform — built and maintained with Devin — be a credible
+alternative or complement for internal tools?
 
-- **KYC Review** (`/kyc`) — a review queue with claim/decision workflow, permission-gated state transitions and a full audit trail.
-- **Feature Flags** (`/flags`) — environment-scoped flag administration with production guardrails and a read API for services.
+**What was built.** A shared platform (`platform/*`: demo session auth, RBAC, transactional audit log, declarative
+workflow helper, UI kit, app registry, connector catalog) and two structurally different apps on it:
 
-This is a prototype built to evaluate replacing Microsoft Power Apps with an in-house platform. It is not
-production-ready: authentication is a demo cookie, the schema is applied with `prisma db push` rather than
-migrations, and nothing is deployed.
+- **KYC Review** (`/kyc`) — queue, claim, approve/reject/escalate with mandatory reasons, high-risk (score ≥ 80)
+  approvals behind a separate permission, four-eyes on self-escalated cases, optimistic concurrency, audit timeline.
+- **Feature Flags** (`/flags`) — dev/staging/prod flags with rollout percentages, prod-only write permission, kill
+  switch, compare-and-swap saves, and a token-authenticated read API for services (`GET /api/flags?env=`).
+- **Admin** — `/admin/audit` (cross-app audit explorer) and `/admin/connectors`: one live connector (Random User,
+  fixture fallback) whose raw fields an admin maps onto `KycCase` columns via `{path}` templates; eight placeholder
+  tiles with no network behind them.
 
-| Document | What it is |
+**Why.** KYC is a workflow app (state, ownership, tiered approval, audited decisions); flags is a configuration app
+(environment-graded permissions, a machine-facing API, a safety toggle). One platform serving both without changes is
+the evidence that it is reusable. The two apps were built by two Devin sessions in parallel off the same platform
+commit and merged without touching `platform/**`. The refunds dashboard was intentionally not built.
+
+**Status.** Prototype, not production: demo cookie auth (no SSO), `prisma db push` instead of migrations, nothing
+deployed, audit append-only by convention only, one read-only HTTP connector, no browser tests in CI.
+
+| Document | Read it for |
 |---|---|
-| `PLAN.md` | The up-front architecture and execution proposal |
-| `docs/ARCHITECTURE.md` | How the platform works and how to add app #3 |
-| `docs/EVALUATION.md` | The honest build/buy assessment, gaps included |
-| `docs/KEY_DECISIONS.md` | Each decision, why, and what it costs |
-| `docs/DEMO.md` | ~8 minute walkthrough script |
+| `docs/KEY_DECISIONS.md` | one page: what was decided, why, evidence, cost — ~1 minute |
+| `docs/EVALUATION.md` | Power Apps comparison, cost discussion, recommendation, production gaps |
+| `docs/ARCHITECTURE.md` | request path, authorization/audit/workflow models, how to add an app |
+| `docs/DEMO.md` | 5-minute walkthrough script |
+| `PLAN.md` | the pre-implementation proposal, kept as written |
+| `docs/STATUS.md` | task status |
 
-## Running locally
+## Run locally
+
+Node 22 and a local PostgreSQL.
 
 ```bash
-cp .env.example .env            # point DATABASE_URL at a local Postgres
-npm install
-npx prisma db push              # no migrations: the schema is pushed, not migrated
+cp .env.example .env            # DATABASE_URL, SESSION_SECRET, FLAGS_API_TOKEN (dev values)
+npm install                     # postinstall runs `prisma generate`
+npx prisma db push              # no migrations in this prototype
 npm run db:seed
-npm run dev                     # http://localhost:3000
+npm run dev                     # http://localhost:3000 → /login, pick a seeded user (no password)
 ```
 
-After pulling a change that touches `prisma/schema/*`, re-run `npx prisma db push` (it also regenerates the Prisma
-client) and restart the dev server; otherwise new models are `undefined` at runtime.
+Re-run `npx prisma db push` and restart the dev server after any change to `prisma/schema/*`.
 
-Sign in from `/login` by picking a seeded user — the demo has no external IdP (see "Authentication" below).
-
-Seeding is only partly additive. Users, roles, permissions and feature flags are upserted, so flag configuration
-edited through the UI survives; `RESET_DEMO=1 npm run db:seed` rebuilds the demo flags from scratch. **KYC data is
-always wiped and regenerated** — `prisma/seed.kyc.ts` deletes every case, document and `kyc` audit row on each run.
+Seeding is partly additive: users, roles, permissions and flags are upserted (`RESET_DEMO=1` rebuilds demo flags),
+connector mappings are installed only when none exist, but **KYC cases, documents and `kyc` audit rows are wiped and
+regenerated on every seed**.
 
 ## Checks
 
 ```bash
 npm run typecheck
-npm test                        # 144 tests; needs DATABASE_URL — server actions and /api/flags run against Postgres
-npm run build                   # do not run while `npm run dev` is using .next
+npm test                        # 161 tests in 14 files; needs DATABASE_URL — actions, API and connector tests hit Postgres
+npm run test:coverage
+npm run build                   # not while `npm run dev` holds .next
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same three against a Postgres service on every PR.
+CI (`.github/workflows/ci.yml`) runs typecheck, tests and build against a Postgres service on every PR.
+`platform/connectors/random-user.integration.test.ts` calls the real `randomuser.me` and skips when offline.
+There are no browser tests in CI; authorization, stale-form and audit behaviour were exercised in recorded manual
+browser runs.
 
 ## Layout
 
 ```
 app/
-  (auth)/           sign-in/out server actions
-  admin/audit/      platform-wide audit explorer
-  admin/connectors/ connector catalog (one live HTTP connector)
-  kyc/              KYC application  (owned by one team/session)
-  flags/            Feature flag app (owned by one team/session)
-  api/flags/        token-authenticated flag read API for services
+  (auth)/            sign-in / sign-out actions
+  admin/audit/       audit explorer
+  admin/connectors/  connector catalog, pull action, [id]/schema mapping editor
+  kyc/  flags/       the two apps — pages, actions, workflow, app.config.ts (nav + permissions)
+  api/flags/         token-authenticated flag read API
 platform/
-  auth/       session + getCurrentUser + requirePermission
-  rbac/       permission resolution, can(), four-eyes helper
-  audit/      transactional audit writer + diffing
-  workflow/   declarative state machine with permission guards
-  ui/         AppShell, DataTable, form primitives, audit timeline
-  registry/   app catalog: nav + permission declarations
-  connectors/ connector catalog: one live HTTP source + disabled placeholders
-  db/         Prisma client
-prisma/
-  schema/       core.prisma + one schema file per app
-  seed.ts       runs seed.core.ts + one seed file per app
-test/           shared Prisma fixtures and Next.js mocks for the test suite
+  auth  rbac  audit  workflow  ui  registry  connectors  db
+prisma/schema/       core.prisma + one file per app;  prisma/seed.ts runs seed.core + one seed per app
+test/                Postgres fixtures and Next.js mocks
 ```
 
-## Conventions that make parallel development work
+## How the platform works, briefly
 
-1. An app session touches only `app/<app-id>/**`, `prisma/schema/<app-id>.prisma` and `prisma/seed.<app-id>.ts`.
-2. `platform/**` is a contract. If an app needs something it doesn't provide, raise it — don't edit shared code mid-stream.
-3. Apps declare their permissions in `app/<app-id>/app.config.ts`; the seed reconciles them into the database.
-4. App sessions add no new dependencies.
+- **Authentication** — `/login` lists seeded users; picking one issues a self-signed 8-hour cookie (`jose`, HS256).
+  Consumers see only `getCurrentUser()` / `requireUser()` / `requirePermission()`; an OIDC swap is contained to
+  `platform/auth` but has not been done.
+- **RBAC** — permissions are declared in code (`app/<id>/app.config.ts`, e.g. `kyc.case.approve.high_risk`,
+  `flags.write.prod`), roles are Postgres rows reconciled by the seed. Enforced server-side at the page and again in
+  the server action; the UI's `can()` only decides what renders.
+- **Audit** — `writeAudit(tx, ...)` runs in the same Prisma transaction as the mutation, so no change exists without
+  its audit row and a rejected action leaves none. `before`/`after` hold changed fields only.
+- **Workflow** — `defineMachine({ from, to, action, permission, requiresReason, guard })` drives both the UI's
+  available actions and the server's checks.
+- **Adding an app** — `app/<id>/app.config.ts`, `prisma/schema/<id>.prisma`, `prisma/seed.<id>.ts`, one line in
+  `platform/registry/index.ts`, then pages and actions using the helpers above. Done once (flags next to KYC); an
+  estimate for app #3 onward.
 
-Adding internal app #3 is: one directory, one schema file, one line in `platform/registry/index.ts`.
-
-## Authentication
-
-The prototype signs its own session cookie against a seeded user directory so the demo runs with no external
-dependency. Every consumer only sees `getCurrentUser()` / `requirePermission()`, so replacing it with Auth.js + OIDC
-(Okta/Entra) is contained to `platform/auth`.
-
-## Authorization model
-
-Permissions are declared in code, roles are data. Server components call `requirePermission()`; server actions
-re-check permission at the mutation. The UI uses the same permission list to hide what a user cannot do, but hiding is
-never the enforcement.
-
-## Audit
-
-`AuditEvent` rows are written with the same Prisma transaction as the mutation they describe, so a change can never
-exist without its audit record. `/admin/audit` is a generic viewer; apps render per-entity timelines from the same table.
+Details: `docs/ARCHITECTURE.md`. Comparison, cost and recommendation: `docs/EVALUATION.md`.
