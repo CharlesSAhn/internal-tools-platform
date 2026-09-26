@@ -24,4 +24,12 @@ export function getConnector(id: string): Connector | undefined {
 
 export { ConnectorDisabledError, disabledConnector } from "./types";
 export type { Connector, ConnectorRecord, ConnectorStatus } from "./types";
-export { listRandomUsers, randomUserConnector, fixtureApplicants, REQUEST_TIMEOUT_MS, RANDOM_USER_URL } from "./random-user";
+export {
+  listRandomUsers,
+  randomUserConnector,
+  fixtureApplicants,
+  pickRandomUser,
+  RANDOM_USER_FIELDS,
+  REQUEST_TIMEOUT_MS,
+  RANDOM_USER_URL,
+} from "./random-user";

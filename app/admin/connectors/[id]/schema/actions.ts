@@ -11,8 +11,8 @@ import {
   DEFAULT_MAPPING,
   defaultMappingRows,
   ensureMappingRows,
-  isSourceField,
   isTargetField,
+  isValidTemplate,
   NO_SOURCE,
 } from "../../import";
 
@@ -23,8 +23,9 @@ function schemaPath(source: string, error?: string) {
 async function guard(formData: FormData) {
   const source = String(formData.get("source") ?? "");
   const user = await requirePermission(CONNECTORS_PERMISSION);
-  if (!getConnector(source)) redirect(`/admin/connectors?error=${encodeURIComponent("Unknown connector")}`);
-  return { source, user };
+  const connector = getConnector(source);
+  if (!connector) redirect(`/admin/connectors?error=${encodeURIComponent("Unknown connector")}`);
+  return { source, user, connector };
 }
 
 function done(source: string) {
@@ -34,11 +35,12 @@ function done(source: string) {
 }
 
 export async function saveMappingAction(formData: FormData) {
-  const { source, user } = await guard(formData);
+  const { source, user, connector } = await guard(formData);
   const targetField = formData.get("targetField");
-  const sourceField = formData.get("sourceField");
-  if (!isTargetField(targetField) || !isSourceField(sourceField)) {
-    redirect(schemaPath(source, "Unknown field"));
+  const sourceField = String(formData.get("sourceField") ?? "").trim();
+  if (!isTargetField(targetField)) redirect(schemaPath(source, "Unknown field"));
+  if (!isValidTemplate(sourceField, connector.fields)) {
+    redirect(schemaPath(source, `Template must use only {path} tokens from: ${connector.fields.join(", ")}`));
   }
 
   await setSource(source, user, targetField, sourceField, "mapping.save");

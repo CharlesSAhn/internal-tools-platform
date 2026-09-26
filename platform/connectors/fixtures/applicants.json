@@ -1,42 +1,226 @@
 [
   {
-    "id": "faaa7399-a738-48bc-99fb-b91dbea47945",
-    "name": "Tristan Masson",
-    "country": "FR"
+    "gender": "male",
+    "name": {
+      "title": "Mr",
+      "first": "Tristan",
+      "last": "Masson"
+    },
+    "location": {
+      "city": "Caen",
+      "state": "Lot",
+      "country": "France",
+      "postcode": 63019
+    },
+    "email": "tristan.masson@example.com",
+    "login": {
+      "uuid": "faaa7399-a738-48bc-99fb-b91dbea47945"
+    },
+    "dob": {
+      "date": "1979-09-02T21:14:16.409Z",
+      "age": 47
+    },
+    "phone": "04-86-24-62-37",
+    "nat": "FR",
+    "id": {
+      "name": "INSEE",
+      "value": "1790829029494 74"
+    }
   },
   {
-    "id": "b1411393-f13f-46f7-a6cd-2e8e53960df9",
-    "name": "Pero Stolle",
-    "country": "DE"
+    "gender": "male",
+    "name": {
+      "title": "Mr",
+      "first": "Pero",
+      "last": "Stolle"
+    },
+    "location": {
+      "city": "Warin",
+      "state": "Hamburg",
+      "country": "Germany",
+      "postcode": 31888
+    },
+    "email": "pero.stolle@example.com",
+    "login": {
+      "uuid": "b1411393-f13f-46f7-a6cd-2e8e53960df9"
+    },
+    "dob": {
+      "date": "1949-01-16T04:21:35.829Z",
+      "age": 77
+    },
+    "phone": "0481-0484529",
+    "nat": "DE",
+    "id": {
+      "name": "SVNR",
+      "value": "61 150149 S 128"
+    }
   },
   {
-    "id": "3bae1596-d207-4d79-8e03-11b4eda4e75a",
-    "name": "Maxim Wecker",
-    "country": "DE"
+    "gender": "male",
+    "name": {
+      "title": "Mr",
+      "first": "Maxim",
+      "last": "Wecker"
+    },
+    "location": {
+      "city": "Rauschenberg",
+      "state": "Baden-W\u00fcrttemberg",
+      "country": "Germany",
+      "postcode": 52080
+    },
+    "email": "maxim.wecker@example.com",
+    "login": {
+      "uuid": "3bae1596-d207-4d79-8e03-11b4eda4e75a"
+    },
+    "dob": {
+      "date": "1990-09-27T09:31:34.656Z",
+      "age": 35
+    },
+    "phone": "0950-0020807",
+    "nat": "DE",
+    "id": {
+      "name": "SVNR",
+      "value": "70 270990 W 490"
+    }
   },
   {
-    "id": "2bb075a2-3858-41b1-8acd-5f800130e1b2",
-    "name": "Sonali Keshri",
-    "country": "IN"
+    "gender": "female",
+    "name": {
+      "title": "Mrs",
+      "first": "Sonali",
+      "last": "Keshri"
+    },
+    "location": {
+      "city": "Mirzapur",
+      "state": "Goa",
+      "country": "India",
+      "postcode": 19267
+    },
+    "email": "sonali.keshri@example.com",
+    "login": {
+      "uuid": "2bb075a2-3858-41b1-8acd-5f800130e1b2"
+    },
+    "dob": {
+      "date": "1950-03-22T07:57:44.243Z",
+      "age": 76
+    },
+    "phone": "9370061243",
+    "nat": "IN",
+    "id": {
+      "name": "UIDAI",
+      "value": "509377786645"
+    }
   },
   {
-    "id": "21c96cf1-fbd6-4702-9941-107cc8720f2e",
-    "name": "Antonia Poth",
-    "country": "DE"
+    "gender": "female",
+    "name": {
+      "title": "Ms",
+      "first": "Antonia",
+      "last": "Poth"
+    },
+    "location": {
+      "city": "Butzbach",
+      "state": "Th\u00fcringen",
+      "country": "Germany",
+      "postcode": 32972
+    },
+    "email": "antonia.poth@example.com",
+    "login": {
+      "uuid": "21c96cf1-fbd6-4702-9941-107cc8720f2e"
+    },
+    "dob": {
+      "date": "1969-12-15T12:11:22.626Z",
+      "age": 56
+    },
+    "phone": "0644-3577472",
+    "nat": "DE",
+    "id": {
+      "name": "SVNR",
+      "value": "08 151269 P 923"
+    }
   },
   {
-    "id": "0b5b11b3-474c-4223-b8bd-f981e5cbbda9",
-    "name": "Rose Warren",
-    "country": "GB"
+    "gender": "female",
+    "name": {
+      "title": "Mrs",
+      "first": "Rose",
+      "last": "Warren"
+    },
+    "location": {
+      "city": "Inverness",
+      "state": "Grampian",
+      "country": "United Kingdom",
+      "postcode": "G7 3WZ"
+    },
+    "email": "rose.warren@example.com",
+    "login": {
+      "uuid": "0b5b11b3-474c-4223-b8bd-f981e5cbbda9"
+    },
+    "dob": {
+      "date": "1974-08-28T17:04:27.462Z",
+      "age": 52
+    },
+    "phone": "016977 0116",
+    "nat": "GB",
+    "id": {
+      "name": "NINO",
+      "value": "YH 30 37 02 X"
+    }
   },
   {
-    "id": "8e1ac287-2f44-4aa6-9d3d-f9867c3a7649",
-    "name": "Dariusz Rank",
-    "country": "DE"
+    "gender": "male",
+    "name": {
+      "title": "Mr",
+      "first": "Dariusz",
+      "last": "Rank"
+    },
+    "location": {
+      "city": "Querfurt",
+      "state": "Baden-W\u00fcrttemberg",
+      "country": "Germany",
+      "postcode": 53778
+    },
+    "email": "dariusz.rank@example.com",
+    "login": {
+      "uuid": "8e1ac287-2f44-4aa6-9d3d-f9867c3a7649"
+    },
+    "dob": {
+      "date": "1990-04-26T16:36:33.303Z",
+      "age": 36
+    },
+    "phone": "0708-8771909",
+    "nat": "DE",
+    "id": {
+      "name": "SVNR",
+      "value": "65 260490 R 416"
+    }
   },
   {
-    "id": "6b36f9a9-2740-4d65-8cfa-8c466ddb9e67",
-    "name": "Abhimanyu Dawangave",
-    "country": "IN"
+    "gender": "male",
+    "name": {
+      "title": "Mr",
+      "first": "Abhimanyu",
+      "last": "Dawangave"
+    },
+    "location": {
+      "city": "Darbhanga",
+      "state": "Manipur",
+      "country": "India",
+      "postcode": 97641
+    },
+    "email": "abhimanyu.dawangave@example.com",
+    "login": {
+      "uuid": "6b36f9a9-2740-4d65-8cfa-8c466ddb9e67"
+    },
+    "dob": {
+      "date": "1982-04-24T13:45:53.420Z",
+      "age": 44
+    },
+    "phone": "9546629076",
+    "nat": "IN",
+    "id": {
+      "name": "UIDAI",
+      "value": "729691582143"
+    }
   }
 ]
