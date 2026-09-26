@@ -10,10 +10,10 @@ apps, ~60 engineers, a few hundred internal users) those would add operational s
 app/
   kyc/     KYC review queue           app/<id>/app.config.ts declares nav + permissions
   flags/   feature flag admin
-  admin/   platform audit explorer
+  admin/   platform audit explorer, connector catalog + schema mapping
   api/     machine-facing endpoints (flag reads)
 platform/
-  auth  rbac  audit  workflow  ui  registry  db
+  auth  rbac  audit  workflow  ui  registry  connectors  db
 prisma/schema/  core.prisma + one file per app
 ```
 

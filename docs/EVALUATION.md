@@ -1,6 +1,6 @@
 # Should we replace Power Apps with an in-house internal-tools platform?
 
-An honest assessment written from the prototype in this repository (~2 hours of agent time, 28 commits). Everything
+An honest assessment written from the prototype in this repository (~2 hours of agent time for the platform and two apps, extended over several follow-up sessions). Everything
 claimed as "built" below is in the tree on `main`; everything else is explicitly marked as not built. `PLAN.md` has
 the up-front reasoning, `docs/ARCHITECTURE.md` how it works, `docs/KEY_DECISIONS.md` the decisions and their costs.
 
@@ -66,7 +66,7 @@ have CI, cron and code), and premium connectors these three tools are unlikely t
 | Machine-facing API — token-authenticated flag reads per environment | Built | `app/api/flags` |
 | Optimistic concurrency on both apps' writes | Built | `app/kyc/actions.ts`, `app/flags/actions.ts` |
 | Connector catalog — one live HTTP connector with fixture fallback, eight placeholders | Built | `platform/connectors`, `/admin/connectors` |
-| Tests — 144 across 12 files, including server actions and the API route against a real Postgres | Built | `*.test.ts`, `test/fixtures.ts` |
+| Tests — 161 across 14 files, including server actions, connector import and the API route against a real Postgres | Built | `*.test.ts`, `test/fixtures.ts` |
 | CI — Postgres service, typecheck, tests, production build on every PR | Built | `.github/workflows/ci.yml` |
 
 The second app is the evidence that matters. KYC and feature flags were built by two independent sessions in parallel

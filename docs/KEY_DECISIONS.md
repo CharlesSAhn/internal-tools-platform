@@ -1,20 +1,51 @@
-# Key decisions
+# Key decisions (one page)
 
-Every decision below is visible in the code on `main`. Rationale for the ones that were contested is in `PLAN.md`;
-mechanics are in `docs/ARCHITECTURE.md`.
+**Problem.** A Series C fintech (~60 engineers) pays ~$250K/yr for Power Apps to run three internal tools and plans
+10+ more. Can a small, reusable, engineer-owned platform build customized internal tools quickly while keeping enough
+of what makes Power Apps valuable — and is owning it worth it?
 
-| # | Decision | Why | What it costs us |
-|---|---|---|---|
-| 1 | **The platform is libraries and conventions, not a runtime app engine.** `platform/*` is imported by apps; there is no metadata interpreter, no canvas, no formula language. | A metadata engine is Power Apps' architecture, and it only pays off when writing code is the expensive part. It is not, here. | Non-engineers cannot author apps. If that is required, this architecture is the wrong one. |
-| 2 | **One Next.js app, one Postgres, apps as route groups** (`app/kyc`, `app/flags`). | ~13 internal apps and a few hundred internal users do not justify per-app services. One login boundary, one audit log, one CI pipeline, one deploy. | Apps share a release train and a blast radius; a bad dependency upgrade affects every internal tool at once. |
-| 3 | **Permissions are declared in code, roles are data.** `app/<id>/app.config.ts` exports permission keys; `Role`/`RolePermission`/`UserRole` are Postgres rows the seed reconciles. | Permission keys are the enforcement vocabulary and belong next to the code that checks them; who holds a role changes without a deploy. | Adding a permission needs a deploy. Role→IdP-group mapping does not exist yet. |
-| 4 | **Authorization is enforced server-side twice** — `requirePermission()` at the page and again inside the server action. The UI's `can()` only decides what is rendered. | Hidden buttons are not access control; browser testing forged requests past the disabled controls and the server rejected them. | Slightly repetitive call sites; a new action that forgets the second check is the main review risk. |
-| 5 | **Audit rows are written in the same transaction as the mutation** (`writeAudit(tx, ...)`). | "The change happened but the audit row didn't" must not be a reachable state; a rejected action must leave no trace. | Audit is coupled to the write path — an app that mutates outside a server action bypasses it. |
-| 6 | **State transitions are declarative** (`defineMachine({ from, to, action, permission, requiresReason, guard })`), shared by both apps. | The KYC review flow and flag environment writes are the same shape: legality + permission + reason + business guard. Same table drives the UI and the server, so they cannot disagree. | It is ~80 lines, not a workflow engine: no persistence, timers, parallel branches or DSL. |
-| 7 | **Four-eyes is a platform helper**, not KYC logic (`enforceFourEyes`). | Every approval-shaped internal tool needs it, and getting it wrong is an audit finding. | It is a naive actor-identity comparison; delegation and service accounts are not modelled. |
-| 8 | **Writes use optimistic concurrency.** KYC updates are conditional on the status/assignee that were read; flag env writes compare-and-swap on `updatedAt` supplied by the rendered form. | Two reviewers on the same case, or a save racing a production kill switch, must not silently overwrite each other. Both were reproduced in the browser before the fix. | Users see "changed under you, reload" instead of a merge. Exactly simultaneous transaction races were never forced in testing. |
-| 9 | **Demo authentication: a self-signed session cookie** (`jose`, HS256) over seeded users; no external IdP. | Approved for the prototype; it keeps the demo runnable with no OAuth setup, and consumers only see `getCurrentUser()`/`requirePermission()`. | Not production auth. No SSO, MFA, SCIM or session revocation — an ~half-day swap contained to `platform/auth`. |
-| 10 | **Parallel development is enforced by file ownership**, not process: an app session touches only `app/<id>/**`, `prisma/schema/<id>.prisma`, `prisma/seed.<id>.ts`, and never `platform/**` or the registry. | This is the claim the prototype exists to test — whether app #3..#13 are cheap and independent. | Two sessions built KYC and flags concurrently and merged with no conflicts; platform gaps had to be worked around locally rather than fixed mid-stream. |
-| 11 | **Feature flags expose a token-authenticated read API** (`GET /api/flags?env=`). | Proves the platform supports a machine-facing app, not just CRUD screens: services read flags from the same store humans edit. | A single shared bearer token in an env var — no per-service credentials, rotation or rate limiting. |
-| 12 | **Tests cover rules, not rendering.** 110 tests: workflow guards, policy, rollout evaluation, plus server actions and the API route exercised against a real Postgres via `test/fixtures.ts`. | The failure modes that matter are authorization and audit, not markup. | No component or browser tests in CI; UI regressions are caught only by manual browser runs. |
-| 13 | **Refunds dashboard deliberately not built.** | Two structurally unlike apps already demonstrate reuse; a third of the same shape adds cost, not evidence. | The "cheap app #3" claim is an estimate, not a measurement. |
+**Key assumptions.** Engineers, not business users, author the apps (if that is wrong, this architecture is wrong).
+Most planned apps look like KYC (workflow, permissions, audit) rather than like a SharePoint list. Licence savings are
+partly consumed by ownership (~0.3–0.7 FTE), so the case must rest on customization, data locality and no per-seat
+tax. Prototype quality: credible, not production.
+
+**What was built** (all on `main`). `platform/*` — demo session auth, RBAC (permissions in code, roles in data),
+transactional audit log, declarative state-machine helper, UI kit, app registry, connector catalog. Two unlike apps:
+KYC review queue (claim/decide/escalate, high-risk gate, four-eyes, optimistic concurrency, audit timeline) and
+feature flags (dev/staging/prod, prod-only permission, kill switch, compare-and-swap saves, token read API).
+`/admin/audit`, `/admin/connectors` with one live connector (Random User, fixture fallback) whose raw fields an admin
+maps onto `KycCase` columns via `{path}` templates, plus eight placeholder tiles. 161 tests, CI with typecheck, tests
+and build.
+
+**Architectural decisions.**
+1. Platform = libraries and conventions, not a metadata-driven app engine; no canvas or formula language.
+2. One Next.js app, one Postgres, apps as route groups; each app owns `app/<id>`, its schema file and seed.
+3. Permissions declared in code, roles stored as data, `admin` gets everything; enforcement server-side at page *and*
+   mutation, UI `can()` is presentation only.
+4. Audit rows written in the same transaction as the write; a rejected action leaves no trace.
+5. Workflow as an ~80-line `defineMachine` (from/to/permission/reason/guard) shared by both apps, not an engine.
+6. Optimistic concurrency everywhere users can collide (KYC conditional updates, flag `updatedAt` CAS).
+7. Connector boundary is `{ id, raw }`: a documented raw subset, mapped per column with a validated template, an
+   explicit "unmapped" state, and audit — rather than flattening in the adapter.
+8. Nothing enters `platform/*` until a second app needs it.
+
+**Important tradeoffs.** Non-engineers cannot author apps. Adding a permission needs a deploy. All apps share one
+release train and blast radius. Demo cookie auth instead of SSO (contained swap, not done). `prisma db push` instead of
+migrations. Seed is partly additive: KYC data is wiped on every seed. One real connector versus a catalog of hundreds
+— the connector gap is the strongest argument for keeping Power Apps somewhere. Tests cover rules and actions, not
+rendering; no browser tests in CI.
+
+**Biggest risks.** The platform becomes a product with a roadmap and a queue. Bus factor: ownership is a person, not
+an invoice. Agent-generated code shifts cost to review — two concurrency defects were found by review and browser
+testing, not tests. Scope creep toward a no-code builder reopens the Retool/Appsmith question. Precisely simultaneous
+writes were never forced in testing.
+
+**What should happen next.** Decide who authors apps. Then, in order: migrations, real SSO with IdP-group → role
+mapping, deployment with backups, audit hardening (tamper evidence, retention, SIEM), PII handling for KYC, a
+concurrency test and browser smoke tests in CI, access-review reporting, a named platform owner. Migrate flags and
+refunds first, KYC last; re-evaluate at app #5 on measured per-app cost.
+
+**Intentionally not built.** Refunds dashboard; SSO/MFA/SCIM; migrations; deployment/monitoring/on-call; any
+connector beyond one read-only HTTP GET (no OAuth, credential store, paging, write-back); a generic mapping engine;
+tamper-evident audit; KYC file storage/encryption/vendor checks; browser tests in CI; citizen-developer tooling, mobile,
+offline, Power Automate equivalents.
