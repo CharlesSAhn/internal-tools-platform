@@ -1,18 +1,26 @@
 # Should we replace Power Apps with an in-house internal-tools platform?
 
-An honest assessment written from the prototype in this repository (~2 hours of agent time for the platform and two apps, extended over several follow-up sessions). Everything
+An assessment written from the prototype in this repository. The platform and two apps were planned for ~2 hours of
+agent time (`PLAN.md`); the actual work ran across several Devin sessions including review fixes and follow-up
+features, and total effort was not measured precisely — treat any time figure here as an estimate. Everything
 claimed as "built" below is in the tree on `main`; everything else is explicitly marked as not built. `PLAN.md` has
 the up-front reasoning, `docs/ARCHITECTURE.md` how it works, `docs/KEY_DECISIONS.md` the decisions and their costs.
 
 ## The short answer
 
-**Probably yes for engineer-owned workflow tools, and the deciding factor is not the $250K.** The licence saving is
-real but partly consumed by platform ownership. The defensible reasons to move are customization, keeping KYC data in
-our own database, no per-seat tax as headcount grows, and internal tools living in the same repo, CI, review and
-observability as the product.
+**The prototype supports a hybrid approach and justifies a controlled pilot. It does not yet justify a wholesale
+Power Apps replacement.**
 
-**No if the actual goal is that non-engineers build the apps.** Nothing here gives Ops or Compliance an app builder,
-and building one is a different and much larger project. Settle that question before approving any migration.
+What the evidence supports: the in-house platform is technically credible; Devin can build reusable internal-app
+infrastructure; two structurally different apps share the platform without modifying it; engineer-owned,
+workflow-heavy, audit-sensitive tools are a plausible fit, and there the platform has a clear advantage —
+customization without a ceiling, KYC data in our own database, no per-seat cost, and the same repo, CI, review and
+tests as the product.
+
+What it does not yet prove: the long-term cost of owning the platform; that future apps will consistently take one
+session; that migrating off Power Apps is cheaper; that the company should cancel Power Apps; or that anything here is
+production-ready. Power Apps keeps real advantages in citizen development, connectors, governance and vendor
+operations. If the actual goal is that non-engineers build the apps, this architecture is the wrong one.
 
 ## What Power Apps is actually good for
 
@@ -48,8 +56,14 @@ flow, a token store with rotation, schema mapping, rate-limit handling, and an o
 tile versus a catalog of several hundred maintained by the vendor — is the Power Apps gap, and it is the strongest
 argument for keeping Power Apps (or a hybrid) wherever an internal tool's value is mostly in reaching M365 data.
 
-What we would give up and should not miss: the formula language, the canvas layout model, Power Automate flows (we
-have CI, cron and code), and premium connectors these three tools are unlikely to use.
+Two different lists, worth keeping apart — Power Apps is not inferior at these; the question is fit for this company:
+
+- **Not reproduced, and it matters here:** the connector catalog (if future tools live off M365/Dataverse data),
+  citizen development (if Ops/Compliance are meant to author apps), tenant DLP and environment governance, the admin
+  inventory and access-review reporting, the vendor SLA and compliance attestations.
+- **Not reproduced, and probably not important for these three tools:** the formula language, the canvas layout model,
+  mobile shells and offline mode, Power Automate flows (we have CI, cron and code), and premium connectors these
+  workflow tools are unlikely to need.
 
 ## What the prototype demonstrated
 
@@ -67,6 +81,7 @@ have CI, cron and code), and premium connectors these three tools are unlikely t
 | Optimistic concurrency on both apps' writes | Built | `app/kyc/actions.ts`, `app/flags/actions.ts` |
 | Connector catalog — one live HTTP connector with fixture fallback, eight placeholders | Built | `platform/connectors`, `/admin/connectors` |
 | Tests — 161 across 14 files, including server actions, connector import and the API route against a real Postgres | Built | `*.test.ts`, `test/fixtures.ts` |
+| Parallel development — KYC and flags built by two independent sessions off the same platform commit, merged without platform changes | Done once (one data point) | PRs #1, #2, #3 |
 | CI — Postgres service, typecheck, tests, production build on every PR | Built | `.github/workflows/ci.yml` |
 
 The second app is the evidence that matters. KYC and feature flags were built by two independent sessions in parallel
@@ -115,6 +130,26 @@ test that would catch it regressing. The flag API and the UI also both read with
 but means a reader can observe a state that is one write out of date. Before production: add a test that runs the two
 writers concurrently, and decide whether flag reads need a version/ETag for callers that cache.
 
+## Prototype vs Power Apps, area by area
+
+Legend — **Demonstrated**: working in this repo. **Needs engineering**: not built here; would have to be.
+**Power Apps OOTB**: comes with the licence. Power Apps is not inferior where it is strong; the question is fit.
+
+| Area | Prototype | Power Apps |
+|---|---|---|
+| Development speed | **Demonstrated:** platform + two apps across a handful of sessions; the second app was one parallel session with no platform change (one data point; human review time not measured). | Simple form-over-data apps in hours by anyone; complex rules get slow as the low-code layer resists. |
+| Customization | **Demonstrated:** anything expressible in TypeScript — tiered approvals, four-eyes, CAS writes, a service API. | Bounded by the canvas/formula model; escape hatches (PCF, custom connectors) are engineering work anyway. |
+| Authentication | **Needs engineering:** demo cookie only; OIDC swap contained to `platform/auth`, not done. | **OOTB:** Entra ID, conditional access, MFA from the tenant. |
+| RBAC | **Demonstrated:** permissions in code, roles in data, server-side at page and mutation, environment-graded. **Needs engineering:** IdP-group mapping, access-review reports. | **OOTB:** app sharing, security roles, environment roles; fine-grained business rules are harder. |
+| Auditability | **Demonstrated:** transactional, cross-app, diffed, queryable; rejected actions leave no row. **Needs engineering:** tamper evidence, retention, SIEM. | **OOTB:** platform activity logging via Purview; business-level audit is app-by-app work. |
+| Hosting | **Needs engineering:** nothing deployed; single container + managed Postgres is the design. | **OOTB:** Microsoft-hosted with SLA. |
+| Deployment | **Demonstrated:** CI on every PR (typecheck, tests, build). **Needs engineering:** migrations, environments, release process. | **OOTB:** environments and solution pipelines; ALM discipline still on the team. |
+| Connectors | **Demonstrated:** one HTTP connector, fixture fallback, raw-to-column mapping with preview and audit. **Needs engineering:** every further system. | **OOTB:** several hundred maintained connectors. The largest gap. |
+| Governance | **Needs engineering:** no DLP, no environment boundaries, no inventory beyond the registry file. | **OOTB:** tenant DLP, environments, admin centre. |
+| Maintenance | Ours: framework/dependency upgrades, security, on-call — assumed 0.3–0.7 FTE, not measured. | Vendor-maintained runtime; the team maintains apps. |
+| Compliance responsibility | Ours end to end. | Shared: Microsoft's attestations cover the platform; the team owns app-level data handling. |
+| Citizen / developer tooling | Engineers only: IDE, PRs, tests, agent-assisted generation. No business-user authoring. | Business analysts build and change apps without a deploy. |
+
 ## Build vs buy vs hybrid
 
 | | Power Apps (status quo) | Retool / Appsmith (self-hosted) | This platform (in-house) |
@@ -122,10 +157,10 @@ writers concurrently, and decide whether flag reads need a version/ETag for call
 | Who authors apps | Business + engineers | Mostly engineers, some analysts | Engineers only |
 | Customization ceiling | Low once rules get real | Medium — escape hatches, but a proprietary app format | None — it is ordinary application code |
 | Data locality | Microsoft cloud / Dataverse | Our VPC | Our database, our schema |
-| Cost shape | ~$250K/yr per-seat | Per-seat again, lower | Engineering time + hosting |
+| Cost shape | ~$250K/yr per-seat | Per-seat again, lower | Engineering time + ownership + hosting |
 | Governance out of the box | Strong (DLP, environments, admin centre) | Moderate | Whatever we build |
-| Time to a simple CRUD app | Hours | Hours | ~1 session |
-| Time to something like our KYC rules | Slow — the low-code layer fights back | Medium | ~1 session |
+| Time to a simple CRUD app | Hours | Hours | est. ~1 session (not measured) |
+| Time to something like our KYC rules | Slow — the low-code layer fights back | Medium | observed once: one session per app in this prototype, plus review |
 
 **The hybrid is the honest recommendation, and it is not a fudge.** The three tools are not one problem: keep
 Power Apps (or move to Retool/Appsmith) for simple form-over-data and M365-adjacent apps that business users want to
@@ -134,27 +169,34 @@ repo. That preserves citizen development where it earns its keep and stops payin
 
 The pure-build case is only strong if (a) engineers are accepted as the authors, and (b) most of the 13 planned apps
 look like KYC rather than like a SharePoint list. Price Retool/Appsmith properly before deciding: this prototype
-proves the in-house option is credible and cheap to extend, not that it beats the other two.
+shows the in-house option is credible and was cheap to extend once, not that it beats the other two.
 
 ## Cost
 
-| | Power Apps (status quo) | This platform |
+Baseline: the stated **~$250K/yr** Power Apps spend. **Do not compare it with "$0 software cost."** The in-house
+option replaces a licence with ownership: engineering time, platform maintenance, hosting, security, framework and
+dependency upgrades, operational support, and compliance responsibility that Microsoft currently carries. The economic
+question is whether the additional control and customization justify that ownership cost — not whether $250K goes to
+zero.
+
+Everything in the right-hand column below is a **planning estimate or assumption**, not a measurement from this
+prototype. Nothing has been deployed, so hosting and ownership have never been observed.
+
+| | Power Apps (status quo) | This platform (estimates) |
 |---|---|---|
-| Licences | ~$250K/yr | $0 |
-| Hosting | included | ~$3–8K/yr (one container + managed Postgres, plus backups) |
-| Build cost per internal app | Low for simple, high for complex | ~1 agent session + human review |
-| Migration of the 3 existing apps | — | one-off engineering, and a period of running both |
-| Ongoing ownership | Microsoft + a part-time admin | **0.3–0.7 FTE**, call it $80–200K loaded |
-| Marginal cost per additional user | Per-seat | Zero |
+| Licences | ~$250K/yr (stated) | none, but see the rows below |
+| Hosting | included | assumption: one container + managed Postgres with backups; low, but $0 today because nothing is deployed |
+| Build cost per internal app | low for simple apps, high once rules get complex | one data point: the second app took one parallel session plus human review; not yet a trend |
+| Migration of the 3 existing apps | — | one-off engineering plus a period of running both; not estimated |
+| Ongoing ownership | Microsoft + a part-time admin | assumption: **0.3–0.7 FTE** (upgrades, auth, access reviews, incidents, platform requests) |
+| Marginal cost per additional user | per seat | none |
 
-Ownership is not optional overhead — it is dependency and framework upgrades (Next.js and Prisma move fast), auth
-changes, access reviews, incident response for tools that Compliance now depends on, and answering platform requests
-from a dozen app teams. At 0.3 FTE with a healthy platform, the saving is most of the $250K; at 0.7 FTE with a
-platform that has become a product, it is roughly a wash before hosting.
+At the low end of the ownership assumption most of the licence spend is recovered; at the high end — a platform that
+has grown a roadmap — it is close to a wash before hosting. Which end applies is unknown until a few more apps exist.
 
-**So: a real but not dramatic year-one saving, improving as app count and headcount grow. Made on cost alone this is
-a weak case. Made on control, customization and data locality it is a strong one** — and the cost argument only
-becomes decisive if the per-app cost stays near one session, which is exactly what the app-#5 checkpoint below tests.
+**Made on cost alone the case is unproven. Made on control, customization and data locality it is a reasonable one
+for the workflow-heavy tools** — and the cost argument only becomes decisive if per-app effort stays low, which is
+exactly what the pilot below is meant to measure.
 
 ## Gaps before this is production-viable
 
@@ -185,9 +227,26 @@ Ranked by what I would do first:
 
 ## Recommendation
 
-1. Settle "who authors the apps" first. If the answer is engineers, proceed on the hybrid split above.
-2. Migrate the two simplest tools (feature flags, refunds) next quarter, keeping Power Apps live in parallel.
-3. Migrate KYC only after migrations, SSO, audit hardening and PII handling are done.
-4. Name a platform owner at 0.3–0.5 FTE before app #4, not after app #8.
-5. Re-evaluate at app #5: if per-app cost is still ~1 session and platform churn is low, cancel the Power Apps
-   renewal; if the platform has become a bottleneck, the honest move is to stay.
+**Hybrid, via a controlled pilot.** Keep Power Apps for simple form-over-data and M365-centric apps and for anything
+business users need to author. Pilot this platform on the engineer-owned, workflow-heavy tools, and make the
+build-vs-buy decision on what the pilot measures rather than on this prototype.
+
+Decision criteria to answer during the pilot:
+
+1. **Who needs to author the applications?** Engineers only → this architecture fits. Business users → it does not;
+   compare Retool/Appsmith or stay.
+2. **How many of the 10+ future apps are workflow-heavy versus simple CRUD or M365-centric?** The platform's advantage
+   is concentrated in the first group; the connector gap is concentrated in the second.
+3. **What is the actual engineering effort per application?** The prototype has one data point (the second app, one
+   session, no platform change). Measure apps #3–#5 including human review.
+4. **How much ongoing platform ownership is required?** The 0.3–0.7 FTE figure is an assumption; track the real time
+   spent on upgrades, auth, access reviews and platform requests.
+5. **How important are Power Apps connectors and citizen development to the planned apps?** If most of them reach
+   into M365 data or are owned by non-engineers, Power Apps remains the right tool for them.
+
+Suggested sequence: name a platform owner before app #3; pilot with feature flags and refunds (lowest risk) while
+Power Apps stays live; do migrations, SSO, audit hardening and PII handling before KYC moves; re-evaluate after app
+#5 with measured per-app effort and ownership time. Only then decide whether the Power Apps footprint should shrink,
+and by how much. A wholesale replacement is not supported by the current evidence; neither is dismissing the
+in-house option — for the workflow-heavy tools it is credible, and the customization and data-locality advantages
+are real.

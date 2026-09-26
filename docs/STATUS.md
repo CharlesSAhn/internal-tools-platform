@@ -9,4 +9,5 @@
 | Admin-editable raw-field schema mapping | COMPLETE | `/admin/connectors/[id]/schema`, PR #14 |
 | Test coverage pass (161 tests, `npm run test:coverage`) | COMPLETE | PR #14 |
 | FINAL-02 — README / Power Apps evaluation, KEY_DECISIONS | COMPLETE | `README.md`, `docs/KEY_DECISIONS.md`, `docs/EVALUATION.md` |
+| Final submission pass — docs audited against code, 5-minute DEMO, hybrid-pilot recommendation | COMPLETE | `README.md`, `docs/*.md` |
 | Refunds dashboard | NOT BUILT (intentional) | — |

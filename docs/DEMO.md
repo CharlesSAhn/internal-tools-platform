@@ -1,56 +1,75 @@
-# Demo script (~8 minutes)
+# Demo script (5 minutes, Loom)
 
-```bash
-cp .env.example .env && npm install && npx prisma db push && npm run db:seed && npm run dev
-```
+Setup beforehand (not on camera): `cp .env.example .env && npm install && npx prisma db push && npm run db:seed &&
+npm run dev`, then open `http://localhost:3000` in two browser profiles so switching users is instant. Sign in at
+`/login` by picking a seeded user — no password, demo auth only:
 
-Seeded demo users (sign in by picking one at `/login` — no password, demo auth only):
-
-| User | Roles | Point of the user |
+| User | Roles | Used for |
 |---|---|---|
-| `avery.admin@example.com` | admin | sees everything |
-| `riley.reviewer@example.com` | kyc_reviewer | standard reviewer — blocked on high-risk approvals |
-| `sam.senior@example.com` | kyc_senior_reviewer | can approve high-risk cases |
-| `quinn.viewer@example.com` | kyc_viewer, auditor | read-only + audit log |
-| `eli.editor@example.com` | flags_editor | dev/staging only — blocked from production |
-| `fran.flagadmin@example.com` | flags_admin | can change production |
+| `riley.reviewer@example.com` | kyc_reviewer | standard reviewer, blocked on high-risk approval |
+| `sam.senior@example.com` | kyc_senior_reviewer | approves the escalated high-risk case |
+| `eli.editor@example.com` | flags_editor | dev/staging only |
+| `fran.flagadmin@example.com` | flags_admin | production + kill switch |
+| `avery.admin@example.com` | admin | audit explorer, connectors |
 
-## 1. The platform is the point (1 min)
+Show behaviour, not code. Skip anything not listed.
 
-Home page as `quinn.viewer` — only the apps her roles grant are listed, the others show the missing permission.
-Note: nav, permissions and access are derived from each app's `app.config.ts`; nothing app-specific lives in the shell.
+## 0:00–0:30 — problem and thesis
 
-## 2. KYC: a real workflow, not CRUD (3 min)
+"~60 engineers, ~$250K/yr on Power Apps, three internal tools, 10+ planned. The question is not whether Devin can
+write a CRUD app; it is whether a small engineer-owned platform can carry customized internal tools with the
+properties that matter — RBAC, audit, workflow — and what we would still owe Power Apps. This is a prototype; the
+evaluation says exactly where it stops."
+
+## 0:30–1:00 — architecture / platform
+
+Home page as `avery.admin`: nav lists KYC Review, Feature Flags, Audit log, Connectors — app links come from each app's
+`app.config.ts`, admin links from platform permissions; a user without the permission sees neither the link nor
+the page. One sentence on the shape: one Next.js app, one Postgres, apps as route groups, `platform/*` is
+libraries and conventions — no metadata engine, no canvas. Every mutation goes `requirePermission → transition →
+transaction(write + audit)`.
+
+## 1:00–2:15 — KYC workflow and security
 
 As `riley.reviewer`:
-- `/kyc` — queue with filters (status, risk band, assigned to me) and server-side pagination.
-- Open a **low-risk** case → Claim → Approve. Show the audit timeline entry appearing with actor, action and diff.
-- Open a **high-risk (≥80)** case → Claim → Approve is refused: the approval requires `kyc.case.approve.high_risk`.
-- Escalate it with a reason (the reason is mandatory — the transition is rejected without it).
+- `/kyc` queue, filter to a **high-risk (≥ 80)** unassigned case, open it, **Claim**.
+- **Approve** → refused: requires `kyc.case.approve.high_risk`. Say: "server-side, not a hidden button — browser
+  testing forged this request past a disabled control and it was still rejected with no audit row".
+- **Escalate** without a reason → refused (reason mandatory). Escalate with a reason → succeeds; timeline shows actor,
+  action, reason, diff.
 
-As `sam.senior`:
-- Pick up the escalated case and approve it. Point out that Riley could not have claimed it back — four-eyes is
-  enforced in the platform, not in the page.
+As `sam.senior`: open the escalated case, **Approve** → succeeds. Say: "Riley could not approve her own escalation —
+four-eyes is a platform helper, not KYC code."
 
-## 3. Feature flags: a different shape of app, same platform (2 min)
+## 2:15–3:15 — Feature Flags
 
-As `eli.editor`:
-- `/flags` → open a flag → change the **staging** rollout. Works.
-- Try to change **production** → refused server-side (not a hidden button).
+As `eli.editor`: open `checkout.new_pricing`, change the **staging** rollout → saved, list updates. Try **production**
+→ refused (`flags.write.prod`).
 
-As `fran.flagadmin`:
-- Change production with a change reason; use the **kill switch**.
-- `curl -H "Authorization: Bearer dev-service-token" 'http://localhost:3000/api/flags?env=prod'` — internal tools
-  serving services, not just humans. Without the header: 401.
+As `fran.flagadmin`: change production with a reason; hit the **kill switch**. Then in a terminal:
+`curl -H "Authorization: Bearer dev-service-token" 'localhost:3000/api/flags?env=prod'` → the flag is off for
+services too; without the header → 401. Say: "same platform, structurally different app — config, environments, a
+machine-facing API — and it needed no platform change."
 
-## 4. Auditability across every app (1 min)
+## 3:15–3:45 — audit and parallel development
 
-As `avery.admin` → `/admin/audit`: one log, both apps, every mutation, with actor, reason and field-level diff.
-Every row was written in the same database transaction as the change it describes.
+As `avery.admin`, `/admin/audit`: one log, both apps, every mutation above with actor, reason and field diff, written
+in the same transaction as the change. Then briefly: KYC and flags were built by two Devin sessions in parallel off
+the same platform commit and merged without touching `platform/**` — one data point, but the one the thesis needs.
 
-## 5. What it costs to add app #3 (1 min)
+## 3:45–4:30 — what Power Apps still provides
 
-Walk `app/flags/` and show that it contains only the flag domain: no auth code, no audit plumbing, no table
-component. Then `platform/registry/index.ts` — adding the refunds dashboard is one line plus one directory.
+`/admin/connectors`: nine tiles, one real. Open Random User → **Schema**: raw fields (`name.first`, `nat`,
+`login.uuid`…) mapped onto `KycCase` columns with a preview; **Pull now** → eight cases appear with `KYC-nnnnnn`
+references and `random-user` in the Source column (seeded cases show `manual`). Say: "this one read-only HTTP source took a small module and still needed a
+validator, an unmapped state and audit. The other eight tiles are the gap: Power Apps ships hundreds of maintained
+connectors, plus citizen development, tenant DLP/governance, an admin inventory and a vendor SLA. None of that is
+reproduced here."
 
-Close with `docs/EVALUATION.md`: the recommendation, the ownership cost, and what Power Apps still gives us.
+## 4:30–5:00 — recommendation
+
+"The evidence supports a hybrid and a controlled pilot, not a wholesale replacement. Keep Power Apps for simple,
+M365-centric or business-authored apps; pilot this platform on engineer-owned, workflow-heavy tools — flags and refunds
+first, KYC after SSO, migrations and audit hardening. Measure per-app effort and platform ownership through app #5,
+then decide how much of the Power Apps footprint should shrink. Not production-ready: demo auth, `db push`, nothing
+deployed. Details in `docs/EVALUATION.md`."
